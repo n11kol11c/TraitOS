@@ -97,7 +97,7 @@ Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
 GRUB 2.06 ── "TraitOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.9.1 - RAM-resident, amnesic OS
+ TraitOS v0.10.0 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.

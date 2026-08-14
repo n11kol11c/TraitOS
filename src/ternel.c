@@ -544,7 +544,7 @@ static void cmd_ver(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    tprintf(" TraitOS v0.9.1 (x86_64, Multiboot2)\n");
+    tprintf(" TraitOS v0.10.0 (x86_64, Multiboot2)\n");
 }
 
 static void cmd_info(int argc, char **argv)
@@ -863,7 +863,7 @@ void ternel_main(uintptr_t mbi)
     sec_harden();
     ttask_init();
 
-    tlog("TraitOS v0.9.1 booted on x86_64\n");
+    tlog("TraitOS v0.10.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
     tlog("security: NX %s, W^X %s, SMEP+SMAP %s, KASLR %s, stack guard %s\n",
@@ -880,7 +880,7 @@ void ternel_main(uintptr_t mbi)
     tlog("ipc: mailboxes + recursive mutex ready (blocking send/recv/lock)\n");
 
     tprintf("===============================================\n");
-    tprintf(" TraitOS v0.9.1 - RAM-resident, amnesic OS\n");
+    tprintf(" TraitOS v0.10.0 - RAM-resident, amnesic OS\n");
     tprintf("===============================================\n\n");
 
     tprintf(" Type 'help' for a list of commands.\n");
