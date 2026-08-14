@@ -30,6 +30,23 @@ static uint64_t total_bytes = 0;
 static uint64_t used_bytes = 0;
 static uint32_t block_count = 0;
 
+/* The heap is mutated from task context; with the preemptive scheduler a
+ * timer IRQ can preempt the shell mid-allocation. Hold a brief critical
+ * section so free-list and bump-carve manipulation is never interleaved. */
+static inline unsigned long lock_intr(void)
+{
+    unsigned long flags;
+    __asm__ volatile("pushfq; popq %0" : "=r"(flags));
+    __asm__ volatile("cli");
+    return flags;
+}
+
+static inline void unlock_intr(unsigned long flags)
+{
+    if (flags & (1ul << 9))
+        __asm__ volatile("sti");
+}
+
 static void grow_heap(uint64_t need)
 {
     uint64_t chunk = need > 65536 ? need : 65536;   /* at least 64 KiB */
@@ -61,6 +78,8 @@ void *tmalloc(size_t size)
     if (want < 16)
         want = 16;
 
+    unsigned long flags = lock_intr();
+
     /* first-fit over the free list, splitting oversized blocks */
     struct block **pp = &free_list;
     while (*pp) {
@@ -78,6 +97,7 @@ void *tmalloc(size_t size)
             b->meta = MALLOC_MAGIC;
             used_bytes += b->size;
             block_count++;
+            unlock_intr(flags);
             return (void *)b;
         }
         pp = (struct block **)&b->meta;
@@ -86,8 +106,10 @@ void *tmalloc(size_t size)
     /* bump carve, growing the heap if needed */
     if (bump + want + HEADER_SIZE > bump_end)
         grow_heap(want + HEADER_SIZE);
-    if (bump + want + HEADER_SIZE > bump_end)
+    if (bump + want + HEADER_SIZE > bump_end) {
+        unlock_intr(flags);
         return NULL;
+    }
 
     struct block *b = (struct block *)bump;
     b->size = want;
@@ -95,6 +117,7 @@ void *tmalloc(size_t size)
     bump += HEADER_SIZE + want;
     used_bytes += want;
     block_count++;
+    unlock_intr(flags);
     return (void *)b;
 }
 
@@ -102,13 +125,17 @@ void tfree(void *ptr)
 {
     if (!ptr)
         return;
+    unsigned long flags = lock_intr();
     struct block *b = (struct block *)ptr;
-    if (b->meta != MALLOC_MAGIC)
+    if (b->meta != MALLOC_MAGIC) {
+        unlock_intr(flags);
         return;                       /* double free / bogus pointer */
+    }
     used_bytes -= b->size;
     block_count--;
     b->meta = (uint64_t)(uintptr_t)free_list;
     free_list = b;
+    unlock_intr(flags);
 }
 
 uint64_t tmalloc_total(void)

@@ -138,9 +138,21 @@ vmm_aspace_t *vmm_aspace_current(void)
     return current;
 }
 
+/* Only the user slots (1..255) may be mapped/unmapped through an address
+ * space. Slots 0 and 256..511 are the shared kernel view (identity map +
+ * higher half); touching them here would corrupt the kernel's page tables
+ * for *every* address space. */
+static int kernel_slot(unsigned virt_index)
+{
+    return virt_index == 0 || virt_index >= KERNEL_PML4_START;
+}
+
 int vmm_aspace_map(vmm_aspace_t *as, uintptr_t virt, uintptr_t phys,
                    uint64_t flags)
 {
+    if (kernel_slot(PML4_INDEX(virt)))
+        return -1;
+
     uint64_t *pdpt = table_ensure(as->pml4, PML4_INDEX(virt), flags);
     if (!pdpt)
         return -1;
@@ -159,6 +171,9 @@ int vmm_aspace_map(vmm_aspace_t *as, uintptr_t virt, uintptr_t phys,
 
 void vmm_aspace_unmap(vmm_aspace_t *as, uintptr_t virt)
 {
+    if (kernel_slot(PML4_INDEX(virt)))
+        return;
+
     uint64_t *pdpt = table_lookup(as->pml4, PML4_INDEX(virt));
     if (!pdpt)
         return;

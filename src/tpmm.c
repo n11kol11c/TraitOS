@@ -14,6 +14,22 @@ static uint32_t total_frames = 0;
 static uint32_t free_frames = 0;
 static uint32_t first_free_hint = 0;
 
+/* Bitmap bookkeeping runs in task context; with the preemptive scheduler
+ * keep the alloc/free paths atomic against timer-IRQ preemption. */
+static inline unsigned long lock_intr(void)
+{
+    unsigned long flags;
+    __asm__ volatile("pushfq; popq %0" : "=r"(flags));
+    __asm__ volatile("cli");
+    return flags;
+}
+
+static inline void unlock_intr(unsigned long flags)
+{
+    if (flags & (1ul << 9))
+        __asm__ volatile("sti");
+}
+
 extern char _kernel_phys_start[];
 extern char _kernel_phys_end[];
 
@@ -119,11 +135,13 @@ void tpmm_init(uintptr_t mbi)
 
 uintptr_t tpmm_alloc(void)
 {
+    unsigned long flags = lock_intr();
     for (uint32_t f = first_free_hint; f < total_frames; f++) {
         if (!bit_test(f)) {
             bit_set(f);
             free_frames--;
             first_free_hint = f + 1;
+            unlock_intr(flags);
             return (uintptr_t)f * PAGE_SIZE;
         }
     }
@@ -132,9 +150,11 @@ uintptr_t tpmm_alloc(void)
             bit_set(f);
             free_frames--;
             first_free_hint = f + 1;
+            unlock_intr(flags);
             return (uintptr_t)f * PAGE_SIZE;
         }
     }
+    unlock_intr(flags);
     return 0;
 }
 
@@ -142,11 +162,13 @@ uintptr_t tpmm_alloc(void)
  * boot identity map and the higher-half physmap window. */
 uintptr_t tpmm_alloc_low(void)
 {
+    unsigned long flags = lock_intr();
     for (uint32_t f = first_free_hint; f < 0x40000 && f < total_frames; f++) {
         if (!bit_test(f)) {
             bit_set(f);
             free_frames--;
             first_free_hint = f + 1;
+            unlock_intr(flags);
             return (uintptr_t)f * PAGE_SIZE;
         }
     }
@@ -155,9 +177,11 @@ uintptr_t tpmm_alloc_low(void)
             bit_set(f);
             free_frames--;
             first_free_hint = f + 1;
+            unlock_intr(flags);
             return (uintptr_t)f * PAGE_SIZE;
         }
     }
+    unlock_intr(flags);
     return 0;
 }
 
@@ -166,6 +190,7 @@ uintptr_t tpmm_alloc_contig(size_t pages)
 {
     uint32_t run = 0;
     uint32_t start = 0;
+    unsigned long flags = lock_intr();
 
     for (uint32_t f = first_free_hint; f < total_frames; f++) {
         if (!bit_test(f)) {
@@ -187,6 +212,7 @@ uintptr_t tpmm_alloc_contig(size_t pages)
             run = 0;
         }
     }
+    unlock_intr(flags);
     return 0;
 
 found:
@@ -195,6 +221,7 @@ found:
         free_frames--;
     }
     first_free_hint = start + pages;
+    unlock_intr(flags);
     return (uintptr_t)start * PAGE_SIZE;
 }
 
@@ -203,12 +230,14 @@ void tpmm_free(uintptr_t phys)
     uint32_t frame = (uint32_t)(phys / PAGE_SIZE);
     if (frame >= total_frames)
         return;
+    unsigned long flags = lock_intr();
     if (bit_test(frame)) {
         bit_clear(frame);
         free_frames++;
         if (frame < first_free_hint)
             first_free_hint = frame;
     }
+    unlock_intr(flags);
 }
 
 uint32_t tpmm_free_frames(void)
@@ -243,6 +272,7 @@ void tpmm_reserve_range(uintptr_t base, size_t size)
 
 void tpmm_release_range(uintptr_t base, size_t size)
 {
+    unsigned long flags = lock_intr();
     for (uintptr_t a = base & ~(uintptr_t)(PAGE_SIZE - 1);
          a < base + size; a += PAGE_SIZE) {
         uint32_t frame = (uint32_t)(a / PAGE_SIZE);
@@ -255,4 +285,5 @@ void tpmm_release_range(uintptr_t base, size_t size)
                 first_free_hint = frame;
         }
     }
+    unlock_intr(flags);
 }
