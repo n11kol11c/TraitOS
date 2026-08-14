@@ -22,7 +22,7 @@ SECTIONS {
     /* physical end of the low boot area; higher-half sections load after it */
     _boot_phys_end = ALIGN(4096);
 
-    . = VIRT_BASE + PHYS_BASE;
+    . = VIRT_BASE + _boot_phys_end;
 
     .text ALIGN(4096) : AT(_boot_phys_end) {
         *(.text*)
@@ -49,7 +49,7 @@ SECTIONS {
 
     . = ALIGN(4096);
     _kernel_virtual_end = .;
-    _kernel_virtual_start = VIRT_BASE + PHYS_BASE;
+    _kernel_virtual_start = VIRT_BASE + _boot_phys_end;
     _kernel_phys_start = PHYS_BASE;
     _kernel_phys_end = LOADADDR(.bss) + SIZEOF(.bss);
 }
