@@ -41,6 +41,11 @@ extern char _etext[], _erodata[];
 #define IMAGE_LOCAL   0x100000u
 
 static uintptr_t kaslr_base = 0;
+static int stack_guard_set = 0;
+
+static int sec_guard_stack(void);
+
+extern char stack_bottom[];
 
 static uint64_t rdmsr(uint32_t msr)
 {
@@ -264,7 +269,43 @@ void sec_harden(void)
         pd[i] |= NX;
 
     sec_split_window(pd, kaslr_base);
+    sec_guard_stack();
     sec_flush_tlb();
+}
+
+/* Split the identity map's first 2 MiB leaf (which covers the 1 MiB kernel
+ * stack in .boot.bss) into 4 KiB pages and leave the page just below the
+ * stack non-present: an overflow faults instead of corrupting the boot page
+ * tables below it. The guard page is only unmapped in the *identity* map;
+ * the live tables themselves are reached by physical CR3 walks and through
+ * the higher-half window, so they stay usable. */
+static int sec_guard_stack(void)
+{
+    uintptr_t guard = (uintptr_t)stack_bottom - PAGE_SIZE;
+    if ((guard & (PAGE_SIZE - 1)) || guard >= WINDOW_SIZE)
+        return -1;
+
+    uintptr_t cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+    uint64_t *pml4 = table_of(cr3);
+    uint64_t *p2_lo = table_of(table_of(pml4[0])[0]);
+
+    uintptr_t pt_frame = tpmm_alloc_low();
+    if (!pt_frame)
+        return -1;
+
+    uint64_t *pt = table_of(pt_frame);
+    tmemset(pt, 0, 4096);
+    tsec_fill_guard_pt(pt, guard);
+
+    p2_lo[0] = pt_frame | VMM_PAGE_PRESENT | VMM_PAGE_WRITE;
+    stack_guard_set = 1;
+    return 0;
+}
+
+int sec_stack_guard_enabled(void)
+{
+    return stack_guard_set;
 }
 
 /* Leaf flags for a virtual address (0 if unmapped). */

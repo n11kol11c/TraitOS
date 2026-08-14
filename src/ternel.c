@@ -195,6 +195,8 @@ static void cmd_sec(int argc, char **argv)
             (unsigned long)(base ? base : 0x100000));
     tprintf(" W^X    : %s\n", sec_wx_enforced() ? "enforced" : "VIOLATED");
     tprintf(" NX     : %s\n", sec_nx_enforced() ? "enforced" : "VIOLATED");
+    tprintf(" stack  : %s\n",
+            sec_stack_guard_enabled() ? "guarded" : "unguarded");
     tprintf(" heap   : mapped non-executable\n");
 }
 
@@ -633,14 +635,15 @@ void ternel_main(uintptr_t mbi)
     tlog("TraitOS v0.8.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
-    tlog("security: NX %s, W^X %s, SMEP+SMAP %s, KASLR %s\n",
+    tlog("security: NX %s, W^X %s, SMEP+SMAP %s, KASLR %s, stack guard %s\n",
          sec_nx_enforced() ? "on" : "off",
          sec_wx_enforced() ? "on" : "off",
          (sec_read_cr4() & ((1ull << 20) | (1ull << 21))) ==
                  ((1ull << 20) | (1ull << 21))
              ? "on"
              : "off",
-         sec_kernel_phys_base() ? "on" : "off");
+         sec_kernel_phys_base() ? "on" : "off",
+         sec_stack_guard_enabled() ? "on" : "off");
 
     tprintf("===============================================\n");
     tprintf(" TraitOS v0.8.0 - RAM-resident, amnesic OS\n");

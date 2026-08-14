@@ -77,6 +77,35 @@ static void verify_window(uintptr_t reloc_base, uintptr_t image_local,
     }
 }
 
+/* Low 2 MiB identity split: 1:1 phys, RW+NX everywhere except the 4 KiB
+ * guard page below the kernel stack, which must be non-present. */
+static void verify_guard_pt(uintptr_t guard)
+{
+    uint64_t pt[512];
+    tsec_fill_guard_pt(pt, guard);
+
+    for (unsigned i = 0; i < 512; i++) {
+        uintptr_t phys = (uintptr_t)i * 4096;
+        uint64_t pte = pt[i];
+        char what[128];
+        int w = (pte & VMM_PAGE_WRITE) != 0;
+        int x = (pte & TSEC_PAGE_NX) == 0;
+
+        if (guard && phys >= guard && phys < guard + 4096) {
+            snprintf(what, sizeof what, "low 0x%lx: guard non-present",
+                     (unsigned long)phys);
+            check(pte == 0, what);
+        } else {
+            snprintf(what, sizeof what, "low 0x%lx: present RW+NX",
+                     (unsigned long)phys);
+            check((pte & VMM_PAGE_PRESENT) && w && !x, what);
+            snprintf(what, sizeof what, "low 0x%lx: 1:1 phys",
+                     (unsigned long)phys);
+            check((uintptr_t)(pte & 0x000FFFFFFFFFF000ULL) == phys, what);
+        }
+    }
+}
+
 int main(void)
 {
     uintptr_t vbase = 0xFFFFFFFF80000000ULL;
@@ -112,6 +141,13 @@ int main(void)
     printf("  -- W^X split, kernel relocated to 64 MiB --\n");
     verify_window(0x04000000, image_local, text_lo, text_hi, rodata_hi,
                   image_end);
+
+    printf("  -- stack guard, guard page below 1 MiB stack --\n");
+    verify_guard_pt(0x10C000);
+    printf("  -- stack guard, guard at 4 KiB --\n");
+    verify_guard_pt(0x1000);
+    printf("  -- stack guard disabled --\n");
+    verify_guard_pt(0);
 
     if (failures) {
         printf("TSEC SMOKE TEST FAILED (%d/%d failures)\n", failures,

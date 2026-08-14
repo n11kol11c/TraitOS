@@ -23,5 +23,6 @@ uint64_t sec_read_cr0(void);
 uintptr_t sec_kernel_phys_base(void);   /* 0 = not relocated (image at 1 MiB) */
 int      sec_wx_enforced(void);
 int      sec_nx_enforced(void);
+int      sec_stack_guard_enabled(void); /* 1 when the stack guard page is on */
 
 #endif

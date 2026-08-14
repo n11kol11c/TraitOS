@@ -48,8 +48,10 @@ p3_high:
     resb 4096
 p2_high:
     resb 4096
+global stack_bottom
 stack_bottom:
     resb 16384
+global stack_top
 stack_top:
 
 section .boot

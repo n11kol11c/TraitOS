@@ -68,4 +68,21 @@ static inline void tsec_fill_window(uint64_t *pt, uintptr_t reloc_base,
     }
 }
 
+/* Identity map for the low 2 MiB (the boot leaf below the kernel), 4 KiB
+ * pages, 1:1 phys, writable+non-executable — with the page at `guard`
+ * (4 KiB aligned) left non-present. The kernel stack lives at 1 MiB just
+ * above the guard, so a stack overflow faults instead of silently
+ * overwriting the boot page tables below it. */
+static inline void tsec_fill_guard_pt(uint64_t *pt, uintptr_t guard)
+{
+    for (unsigned i = 0; i < 512; i++) {
+        uintptr_t phys = (uintptr_t)i * 4096;
+        if (guard && phys >= guard && phys < guard + 4096)
+            pt[i] = 0;                   /* non-present: guard page */
+        else
+            pt[i] = phys | VMM_PAGE_PRESENT | VMM_PAGE_WRITE |
+                    TSEC_PAGE_NX;
+    }
+}
+
 #endif
