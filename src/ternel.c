@@ -331,6 +331,15 @@ static void cmd_info(int argc, char **argv)
     tprintf(" heap      : %u KiB mapped, %u KiB used, %u blocks\n",
             (uint32_t)(tmalloc_total() >> 10),
             (uint32_t)(tmalloc_used() >> 10), tmalloc_blocks());
+    uint64_t cr4 = sec_read_cr4();
+    tprintf(" sec      : NX %s, W^X %s, SMEP/SMAP %s, kaslr %s\n",
+            sec_nx_enforced() ? "on" : "off",
+            sec_wx_enforced() ? "on" : "off",
+            (cr4 & ((1ull << 20) | (1ull << 21))) ==
+                    ((1ull << 20) | (1ull << 21))
+                ? "on"
+                : "off",
+            sec_kernel_phys_base() ? "on" : "off");
 }
 
 static void cmd_alloc(int argc, char **argv)
@@ -624,6 +633,14 @@ void ternel_main(uintptr_t mbi)
     tlog("TraitOS v0.8.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
+    tlog("security: NX %s, W^X %s, SMEP+SMAP %s, KASLR %s\n",
+         sec_nx_enforced() ? "on" : "off",
+         sec_wx_enforced() ? "on" : "off",
+         (sec_read_cr4() & ((1ull << 20) | (1ull << 21))) ==
+                 ((1ull << 20) | (1ull << 21))
+             ? "on"
+             : "off",
+         sec_kernel_phys_base() ? "on" : "off");
 
     tprintf("===============================================\n");
     tprintf(" TraitOS v0.8.0 - RAM-resident, amnesic OS\n");
