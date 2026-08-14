@@ -119,9 +119,12 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
       entropy, initrd + used frames excluded); live page tables moved out of
       the overridden window first; the original copy stays reserved
 - [x] RAM scrub on `halt`/`reboot` + `scrub` command (free frames < 1 GiB)
+- [x] Kernel stack guard page: the identity map's first 2 MiB leaf is split
+      to 4 KiB and the page below `.boot.bss` stack is left non-present, so
+      a stack overflow faults instead of corrupting the boot page tables
 - [ ] Kernel-image *virtual* KASLR (randomize the virtual base) — needs
       `-fPIC` + relocations; deferred to the user-mode milestone
-- [ ] Stack guard pages / canaries
+- [ ] Stack canaries / guard pages for the future kernel heap
 - [ ] Kernel KASLR via the GRUB `multiboot2` relocatable tag (later)
 
 ### M6 — Processes

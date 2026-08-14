@@ -61,8 +61,9 @@ RAM filesystem — all surfaced through an interactive TUI shell.
   mapped non-executable, a W^X split of the kernel image (`.text` is
   read-only+executable, `.rodata` read-only, everything else NX), SMEP +
   SMAP in CR4, **physical KASLR** (the image relocates to a randomized 2 MiB
-  slot at boot), and RAM scrubbing on `halt`/`reboot` so nothing survives in
-  memory. `sec` verifies all of it at runtime.
+  slot at boot), a guard page below the kernel stack, and RAM scrubbing on
+  `halt`/`reboot` so nothing survives in memory. `sec` verifies all of it at
+  runtime.
 - **Interrupts & input** — IDT for 32 exceptions + 16 IRQs, PIC remap, 100 Hz
   PIT, PS/2 keyboard with shift/caps and a ring buffer.
 - **Interactive shell** — `help`, `info`, `alloc`, `paging`, `heap`, `aspace`,
@@ -167,6 +168,7 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
  kaslr  : on (image @ 0x4000000)
  W^X    : enforced
  NX     : enforced
+ stack  : guarded
  heap   : mapped non-executable
 
    > aspace
@@ -415,7 +417,7 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `whoami`   | print the current user (from `$USER`)                     |
 | `halt`     | halt the CPU (power-off not implemented)                  |
 | `reboot`   | reboot via the 8042 keyboard controller                   |
-| `sec`      | show + verify CPU hardening (NX, W^X, SMEP/SMAP, KASLR)   |
+| `sec`      | show + verify CPU hardening (NX, W^X, SMEP/SMAP, KASLR, guard) |
 | `scrub`    | zero every free physical frame (amnesia)                  |
 | `ls`       | list a directory (default `/`)                            |
 | `cat`      | print a file (ramfs, procfs, sysfs)                       |
@@ -462,7 +464,7 @@ src/                   kernel sources (flat, self-contained modules)
   tmalloc.{c,h}        kernel heap
   tpmm.{c,h}           bitmap physical memory manager
   tvmm.{c,h}           paging + per-process address spaces
-  tsec.{c,h}           M5 hardening: NX, W^X, SMEP/SMAP, KASLR, scrub
+  tsec.{c,h}           M5 hardening: NX, W^X, SMEP/SMAP, KASLR, guard, scrub
   tsec_core.h          pure W^X/KASLR PTE math (host-tested)
   tfs.{c,h}            ramfs VFS core
   ttarfs.c             ustar tar unpacker + initrd loader
@@ -482,7 +484,8 @@ build.sh               deps/build/iso/run/usb/clean wrapper
 
 TraitOS defends against **software** tampering and data persistence: no writes
 to the boot media, no swap, no dump, NX pages, SMEP/SMAP, a W^X kernel image,
-physical KASLR, and RAM scrubbing on shutdown so nothing survives in memory.
+physical KASLR, a stack guard page, and RAM scrubbing on shutdown so nothing
+survives in memory.
 
 It does **not** defend against cold-boot/RAM-dump attacks, hardware
 (evil-maid) tampering, or firmware compromise — because no pure-software OS can
