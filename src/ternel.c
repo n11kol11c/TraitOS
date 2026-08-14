@@ -138,6 +138,36 @@ static void cmd_set(int argc, char **argv)
         tprintf(" set: environment table full\n");
 }
 
+static void cmd_whoami(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    const char *user = tsh_env_get("USER");
+    tprintf(" %s\n", user ? user : "root");
+}
+
+static void cmd_halt(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" halting\n");
+    __asm__ volatile("cli");
+    for (;;)
+        __asm__ volatile("hlt");
+}
+
+static void cmd_reboot(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" rebooting...\n");
+    __asm__ volatile("cli");
+    /* 8042 keyboard-controller system reset pulse */
+    __asm__ volatile("outb %0, %1" : : "a"((uint8_t)0xFE), "Nd"((uint16_t)0x64));
+    for (;;)
+        __asm__ volatile("hlt");
+}
+
 /* ---- command interpreter --------------------------------------------- */
 
 static void cmd_help(int argc, char **argv);
@@ -154,6 +184,9 @@ static void cmd_aspace(int argc, char **argv);
 static void cmd_hist(int argc, char **argv);
 static void cmd_env(int argc, char **argv);
 static void cmd_set(int argc, char **argv);
+static void cmd_whoami(int argc, char **argv);
+static void cmd_halt(int argc, char **argv);
+static void cmd_reboot(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
 static void cmd_cat(int argc, char **argv);
 static void cmd_mkdir(int argc, char **argv);
@@ -181,6 +214,9 @@ static const struct {
     { "hist",   cmd_hist,   "show command history (up/down arrows recall)" },
     { "env",    cmd_env,    "show environment variables" },
     { "set",    cmd_set,    "set an environment variable (KEY=VALUE)" },
+    { "whoami", cmd_whoami, "print the current user (from $USER)" },
+    { "halt",   cmd_halt,   "halt the CPU (power-off not implemented)" },
+    { "reboot", cmd_reboot, "reboot via the keyboard controller (8042)" },
     { "ls",     cmd_ls,     "list a directory (default /)" },
     { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
     { "mkdir",  cmd_mkdir,  "create a directory" },
