@@ -66,7 +66,17 @@ iso: traitos.bin $(RAMFS_IMG)
 run: iso
 	qemu-system-x86_64 -cdrom traitos.iso -serial stdio -m 256M
 
+HOST_CC ?= cc
+
+smoke: $(RAMFS_IMG)
+	@mkdir -p build
+	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/fs_smoke.c \
+	    src/tfs.c src/ttarfs.c src/tstring.c src/tprocfs.c src/tsysfs.c \
+	    -o build/smoke
+	./build/smoke
+
 clean:
+	@rm -rf build
 	@rm -f $(KERN_OBJS) traitos.bin traitos.iso $(RAMFS_IMG)
 
-.PHONY: all iso run clean user-programs
+.PHONY: all iso run smoke clean user-programs

@@ -24,6 +24,9 @@ jobs:
       - name: Build bootable ISO
         run: make iso
 
+      - name: Filesystem smoke test (no emulator)
+        run: make smoke
+
       - uses: actions/upload-artifact@v4
         with:
           name: traitos.iso

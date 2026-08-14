@@ -58,6 +58,11 @@ make_iso() {
     make iso
 }
 
+run_smoke() {
+    log "Running host-side filesystem smoke test (no emulator needed)..."
+    make smoke
+}
+
 run_qemu() {
     if ! command -v qemu-system-x86_64 &>/dev/null; then
         err "qemu-system-x86_64 not found. Install QEMU (macOS: brew install qemu)."
@@ -105,6 +110,7 @@ case "${1:-all}" in
     build)   build ;;
     iso)     build && make_iso ;;
     run)     build && make_iso && run_qemu ;;
+    smoke)   build && run_smoke ;;
     usb)     write_usb "$2" ;;
     clean)   clean ;;
     all|"")
@@ -114,13 +120,14 @@ case "${1:-all}" in
         echo -e "${GREEN}║      TraitOS built successfully!      ║${NC}"
         echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
         echo ""
+        echo -e "  ${YELLOW}Verify (no emulator):${NC} ./build.sh smoke"
         echo -e "  ${YELLOW}Run in QEMU:${NC}  ./build.sh run"
         echo -e "  ${YELLOW}Write to USB:${NC} ./build.sh usb /dev/diskX"
         echo -e "  ${YELLOW}ISO file:${NC}     $(pwd)/traitos.iso"
         echo ""
         ;;
     *)
-        echo "Usage: $0 {deps|build|iso|run|usb [device]|clean|all}"
+        echo "Usage: $0 {deps|build|iso|run|smoke|usb [device]|clean|all}"
         exit 1
         ;;
 esac

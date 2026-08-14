@@ -149,8 +149,13 @@ nasm -f elf64
 
 ## Testing
 
-- CI builds `traitos.bin` + `traitos.iso` on every push.
-- Local smoke test: `./build.sh run` (QEMU, not required for building).
+- CI builds `traitos.bin` + `traitos.iso` on every push, then runs the
+  host-side filesystem smoke test (`make smoke`).
+- Host-side smoke test (`tests/fs_smoke.c`, `make smoke`) compiles the fs
+  modules against the host libc with stubs for kernel-only symbols, unpacks
+  the real `boot/ramfs.img`, and verifies the tree — **no emulator required**.
+- QEMU (`./build.sh run`) and real-hardware USB boot (`./build.sh usb`) are
+  optional visual runs; USB is the primary deployment target.
 - Serial output (`-serial stdio`) for kernel logs via `tlog`.
 - Later: in-kernel self-tests (`kunit`-style) for pmm/vmm/string.
 

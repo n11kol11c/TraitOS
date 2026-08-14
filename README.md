@@ -275,7 +275,8 @@ Key rules:
 ```sh
 ./build.sh deps       # installs the toolchain for your OS (macOS/Linux)
 ./build.sh all        # build kernel + bootable ISO → traitos.iso
-./build.sh run        # boot traitos.iso in QEMU (-serial stdio, 256M)
+./build.sh smoke      # verify the filesystem host-side, no emulator needed
+./build.sh run        # optionally boot traitos.iso in QEMU (-serial stdio, 256M)
 ```
 
 That is it. Thirty seconds later you are in the TraitOS shell.
@@ -285,12 +286,26 @@ That is it. Thirty seconds later you are in the TraitOS shell.
 ```sh
 make                 # just the kernel → traitos.bin
 make iso             # + initrd + bootable ISO → traitos.iso
+make smoke           # host-side filesystem verification, no emulator
 ```
 
 `make iso` also builds the initrd (`boot/ramfs.img`) from `initrd/` via a
 ustar archive and tells GRUB to load it with a `module2` line in `grub.cfg`.
 
-### Run in an emulator
+### Verify without an emulator
+
+`make smoke` compiles the filesystem modules (`tfs`, `ttarfs`, `tprocfs`,
+`tsysfs`) against the host libc with small stubs for kernel-only symbols, then
+unpacks the real `boot/ramfs.img` and checks the tree: it walks every node,
+cats the sample files, exercises `write`/`rm`/`mkdir -p`, and prints
+`SMOKE TEST PASSED` when everything is correct. CI runs it on every push, so
+the RAM filesystem is verified on your machine **and** in GitHub Actions with
+zero emulators involved.
+
+### Run in an emulator (optional)
+
+Not required to build or verify the project — the smoke test covers the
+filesystem without one. If you have QEMU anyway:
 
 ```sh
 ./build.sh run
@@ -320,7 +335,8 @@ the bundled `x86_64-efi` modules.
 | `./build.sh deps`        | Install the toolchain (Homebrew / apt / dnf / pacman) |
 | `./build.sh build`       | Build `traitos.bin`                                 |
 | `./build.sh iso`         | Build `traitos.bin` + `traitos.iso`                 |
-| `./build.sh run`         | Build and boot in QEMU                              |
+| `./build.sh smoke`       | Run the host-side filesystem smoke test (no emulator) |
+| `./build.sh run`         | Build and boot in QEMU (optional)                   |
 | `./build.sh usb [dev]`   | Write `traitos.iso` to a USB stick (erases it)      |
 | `./build.sh clean`       | Remove build artifacts                              |
 | `./build.sh all`         | Default: build kernel + ISO                         |
@@ -329,8 +345,9 @@ the bundled `x86_64-efi` modules.
 
 Pushing to GitHub triggers the `build` workflow (`.github/workflows/ci.yml`):
 it installs nasm/lld/grub tooling on Ubuntu, runs `make all`, runs `make iso`,
-and uploads `traitos.iso` as an artifact. If the badge at the top is green,
-the latest push builds clean.
+runs the filesystem smoke test (`make smoke`), and uploads `traitos.iso` as an
+artifact. If the badge at the top is green, the latest push builds clean and
+the RAM filesystem is verified — no emulator anywhere in the pipeline.
 
 ---
 

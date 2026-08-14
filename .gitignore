@@ -4,3 +4,4 @@
 iso/
 .DS_Store
 boot/ramfs.img
+build/
