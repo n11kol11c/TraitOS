@@ -89,6 +89,9 @@ smoke: $(RAMFS_IMG)
 	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/ipc_smoke.c \
 	    -o build/ipc_smoke
 	./build/ipc_smoke
+	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/elf_smoke.c \
+	    -o build/elf_smoke
+	./build/elf_smoke
 
 clean:
 	@rm -rf build
