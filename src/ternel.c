@@ -15,6 +15,8 @@
 #include "tsec.h"
 #include "ttask.h"
 #include "tipc.h"
+#include "telf.h"
+#include "telf_core.h"
 #include "tfs.h"
 #include "tsh.h"
 
@@ -237,9 +239,10 @@ static void cmd_tasks(int argc, char **argv)
                          : t->state == TTASK_RUNNING ? "run"
                          : t->state == TTASK_EXITED  ? "done"
                                                      : "?";
-        tprintf(" %-3d %-9s %-8s %-5u %-6u%s\n", i, t->name, st,
+        tprintf(" %-3d %-9s %-8s %-5u %-6u%s%s\n", i, t->name, st,
                 t->priority, t->ticks,
-                t == current_task ? "  <=" : "");
+                t == current_task ? "  <=" : "",
+                t->user_mode ? "  user" : "");
     }
 }
 
@@ -426,6 +429,103 @@ static void cmd_mutex(int argc, char **argv)
     tfree(d);
 }
 
+/* ---- M6c user mode ----------------------------------------------------- */
+
+/* User programs are embedded into the kernel image as raw ELF blobs (see
+ * Makefile: `ld -r -b binary`), addressed through the _binary_ symbols. */
+extern char _binary_user_hello_elf_start[];
+extern char _binary_user_hello_elf_end[];
+extern char _binary_user_spinner_elf_start[];
+extern char _binary_user_spinner_elf_end[];
+
+struct user_blob {
+    const char *name;
+    char       *start;
+    char       *end;
+};
+
+static const struct user_blob user_blobs[] = {
+    { "hello", _binary_user_hello_elf_start, _binary_user_hello_elf_end },
+    { "spinner", _binary_user_spinner_elf_start,
+      _binary_user_spinner_elf_end },
+};
+
+#define USER_BLOB_COUNT (sizeof user_blobs / sizeof user_blobs[0])
+
+/* Ring-3 stack: 16 KiB of low frames mapped at the top of PML4 slot 1,
+ * below the program segments at VMM_USER_BASE. */
+#define USER_STACK_BASE 0x0000008000200000ULL
+#define USER_STACK_SIZE (16 * 1024)
+
+static void cmd_run(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: run <program>\n");
+        tprintf(" programs:");
+        for (unsigned i = 0; i < USER_BLOB_COUNT; i++)
+            tprintf(" %s", user_blobs[i].name);
+        tprintf("\n");
+        return;
+    }
+
+    const struct user_blob *b = 0;
+    for (unsigned i = 0; i < USER_BLOB_COUNT; i++)
+        if (tstrcmp(user_blobs[i].name, argv[1]) == 0) {
+            b = &user_blobs[i];
+            break;
+        }
+    if (!b) {
+        tprintf(" unknown program '%s'\n", argv[1]);
+        return;
+    }
+
+    vmm_aspace_t *as = vmm_aspace_create();
+    if (!as) {
+        tprintf(" no address space available\n");
+        return;
+    }
+
+    telf_plan_t plan;
+    size_t bsz = (size_t)(b->end - b->start);
+    int rc = telf_load(as, (const uint8_t *)b->start, bsz, &plan);
+    if (rc != TELF_OK) {
+        vmm_aspace_destroy(as);
+        tprintf(" '%s': load failed (%d)\n", argv[1], rc);
+        return;
+    }
+
+    uintptr_t stack_phys = tpmm_alloc_low_contig(USER_STACK_SIZE / 4096);
+    if (!stack_phys) {
+        vmm_aspace_destroy(as);
+        tprintf(" '%s': no stack frames\n", argv[1]);
+        return;
+    }
+    for (unsigned i = 0; i < USER_STACK_SIZE / 4096; i++)
+        if (vmm_aspace_map(as, USER_STACK_BASE + (uintptr_t)i * 4096,
+                           stack_phys + (uintptr_t)i * 4096,
+                           VMM_PAGE_USER | VMM_PAGE_WRITE | VMM_PAGE_NX)) {
+            vmm_aspace_destroy(as);
+            tprintf(" '%s': stack map failed\n", argv[1]);
+            return;
+        }
+
+    ttask_t *t = ttask_create_user(argv[1], plan.entry, as,
+                                   USER_STACK_BASE + USER_STACK_SIZE);
+    if (!t) {
+        vmm_aspace_destroy(as);
+        tprintf(" '%s': no task slot\n", argv[1]);
+        return;
+    }
+
+    int pid = -1;
+    for (int i = 0; i < TTASK_MAX_TASKS; i++)
+        if (ttask_at(i) == t) {
+            pid = i;
+            break;
+        }
+    tprintf(" '%s' running (pid %d)\n", argv[1], pid);
+}
+
 /* ---- command interpreter --------------------------------------------- */
 
 static void cmd_help(int argc, char **argv);
@@ -453,6 +553,7 @@ static void cmd_burst(int argc, char **argv);
 static void cmd_yield(int argc, char **argv);
 static void cmd_ipc(int argc, char **argv);
 static void cmd_mutex(int argc, char **argv);
+static void cmd_run(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
 static void cmd_cat(int argc, char **argv);
 static void cmd_mkdir(int argc, char **argv);
@@ -491,6 +592,7 @@ static const struct {
     { "yield",  cmd_yield,  "yield the CPU to another task" },
     { "ipc",    cmd_ipc,    "mailbox demo: writer/reader block on a shared queue" },
     { "mutex",  cmd_mutex,  "mutex demo: 3 tasks share a protected counter" },
+    { "run",    cmd_run,    "run a user-mode program (hello, spinner)" },
     { "ls",     cmd_ls,     "list a directory (default /)" },
     { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
     { "mkdir",  cmd_mkdir,  "create a directory" },
@@ -878,6 +980,8 @@ void ternel_main(uintptr_t mbi)
     tlog("scheduler: preemptive round-robin @ %u Hz, %d tasks\n",
          (uint32_t)timer_hz(), ttask_count());
     tlog("ipc: mailboxes + recursive mutex ready (blocking send/recv/lock)\n");
+    tlog("user mode: int 0x80 syscalls, ring-3 tasks, %u program(s) embedded\n",
+         (uint32_t)USER_BLOB_COUNT);
 
     tprintf("===============================================\n");
     tprintf(" TraitOS v0.10.0 - RAM-resident, amnesic OS\n");

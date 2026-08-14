@@ -235,6 +235,36 @@ void vmm_aspace_unmap(vmm_aspace_t *as, uintptr_t virt)
         tlb_flush_page(virt);
 }
 
+/* Return 1 and the mapped physical frame if `virt` is present in `as`
+ * (user slots only); 0 otherwise. */
+int vmm_aspace_phys(vmm_aspace_t *as, uintptr_t virt, uintptr_t *phys)
+{
+    if (kernel_slot(PML4_INDEX(virt)))
+        return 0;
+
+    uint64_t *pdpt = table_lookup(as->pml4, PML4_INDEX(virt));
+    if (!pdpt)
+        return 0;
+    uint64_t *pd = table_lookup(pdpt, PDPT_INDEX(virt));
+    if (!pd)
+        return 0;
+    uint64_t e = pd[PD_INDEX(virt)];
+    if (e & (1ull << 7)) {          /* 2 MiB huge page */
+        if (phys)
+            *phys = e & ADDR_MASK;
+        return 1;
+    }
+    uint64_t *pt = table_lookup(pd, PD_INDEX(virt));
+    if (!pt)
+        return 0;
+    uint64_t pte = pt[PT_INDEX(virt)];
+    if (!(pte & VMM_PAGE_PRESENT))
+        return 0;
+    if (phys)
+        *phys = pte & ADDR_MASK;
+    return 1;
+}
+
 int vmm_map_page(uintptr_t virt, uintptr_t phys, uint64_t flags)
 {
     return vmm_aspace_map(current, virt, phys, flags);

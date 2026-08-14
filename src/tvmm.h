@@ -40,6 +40,10 @@ int           vmm_aspace_map(vmm_aspace_t *as, uintptr_t virt,
                              uintptr_t phys, uint64_t flags);
 void          vmm_aspace_unmap(vmm_aspace_t *as, uintptr_t virt);
 
+/* Return 1 and the mapped physical frame if `virt` is present in `as`
+ * (user slots only); 0 otherwise. */
+int vmm_aspace_phys(vmm_aspace_t *as, uintptr_t virt, uintptr_t *phys);
+
 /* Validate that [addr, addr+len) lies inside the user region and that every
  * page it touches is mapped present + user (and writable when `write` is
  * set) in the currently active address space. Safe to call on untrusted

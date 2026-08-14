@@ -2,6 +2,8 @@
 # Requires: clang (freestanding cross-target), lld, nasm, GNU make
 # Optional (for `make iso`): xorriso + grub-mkrescue
 
+all: traitos.bin
+
 CC       = clang
 TARGET   = x86_64-none-elf
 CFLAGS   = --target=$(TARGET) -std=gnu11 -ffreestanding -O2 -Wall -Wextra \
@@ -37,9 +39,23 @@ KERN_OBJS = \
     src/ttask.o src/tipc.o \
     src/ternel.o
 
-USER_PROGS =
+# User-mode programs: assembled, linked at VMM_USER_BASE, then embedded into
+# the kernel image as raw blobs (ld -r -b binary) so `run <program>` can load
+# them into a ring-3 address space at boot.
+USER_PROGS = user/hello.elf user/spinner.elf
+USER_TEXT  = 0x8000000000
 
-all: traitos.bin
+build/user_blobs.o: $(USER_PROGS)
+	@mkdir -p build
+	$(LD) -m elf_x86_64 -r -b binary $(USER_PROGS) -o $@
+
+user/%.o: user/%.S
+	@$(ASM) $(ASMFLAGS) $< -o $@
+
+user/%.elf: user/%.o user/user.ld
+	@$(LD) -m elf_x86_64 -z noexecstack -T user/user.ld -o $@ $<
+
+KERN_OBJS += build/user_blobs.o
 
 boot/%.o: boot/%.asm
 	@$(ASM) $(ASMFLAGS) $< -o $@
@@ -97,5 +113,8 @@ smoke: $(RAMFS_IMG)
 clean:
 	@rm -rf build
 	@rm -f $(KERN_OBJS) traitos.bin traitos.iso $(RAMFS_IMG)
+	@rm -f user/hello.o user/hello.elf user/spinner.o user/spinner.elf
 
 .PHONY: all iso run smoke clean user-programs
+
+.PRECIOUS: user/%.o user/%.elf

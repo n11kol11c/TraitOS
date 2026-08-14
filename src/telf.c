@@ -22,6 +22,12 @@ int telf_load(vmm_aspace_t *as, const uint8_t *blob, size_t size,
         uintptr_t last = (s->vaddr + s->memsz - 1) & ~(uintptr_t)0xFFF;
         size_t pages = (last - first) / 4096 + 1;
 
+        /* defensive: never overlay an already-mapped page (the linker
+         * script page-aligns sections so this cannot trigger normally) */
+        for (size_t p = 0; p < pages; p++)
+            if (vmm_aspace_phys(as, first + p * 4096, NULL))
+                return TELF_E_RANGE;
+
         uintptr_t phys = tpmm_alloc_low_contig(pages);
         if (!phys)
             return TELF_E_RANGE;
