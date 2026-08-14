@@ -1,5 +1,7 @@
 #include "tstring.h"
 
+#include <stdarg.h>
+
 size_t tstrlen(const char *s)
 {
     size_t n = 0;
@@ -131,4 +133,113 @@ void titoa(uint32_t val, char *buf, int base)
     while (i > 0)
         buf[n++] = tmp[--i];
     buf[n] = '\0';
+}
+
+static void buf_put(char *buf, size_t cap, size_t *i, char c)
+{
+    if (*i + 1 < cap)
+        buf[*i] = c;
+    (*i)++;
+}
+
+static void buf_putu(char *buf, size_t cap, size_t *i, uint32_t u)
+{
+    char tmp[12];
+    int t = 0;
+    if (u == 0)
+        tmp[t++] = '0';
+    while (u) {
+        tmp[t++] = '0' + (u % 10);
+        u /= 10;
+    }
+    while (t)
+        buf_put(buf, cap, i, tmp[--t]);
+}
+
+static void buf_putx(char *buf, size_t cap, size_t *i, uint32_t u)
+{
+    static const char digits[] = "0123456789abcdef";
+    char tmp[10];
+    int t = 0;
+    if (u == 0)
+        tmp[t++] = '0';
+    while (u) {
+        tmp[t++] = digits[u & 0xF];
+        u >>= 4;
+    }
+    while (t)
+        buf_put(buf, cap, i, tmp[--t]);
+}
+
+/* Minimal snprintf: %s %d %u %x %p %c %%. No width/flags/precision. */
+int tsprintf(char *buf, size_t cap, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    size_t i = 0;
+    while (*fmt) {
+        char c = *fmt++;
+        if (c != '%') {
+            buf_put(buf, cap, &i, c);
+            continue;
+        }
+        switch (*fmt) {
+        case '%':
+            fmt++;
+            buf_put(buf, cap, &i, '%');
+            break;
+        case 's': {
+            fmt++;
+            const char *s = va_arg(ap, const char *);
+            if (!s)
+                s = "(null)";
+            while (*s)
+                buf_put(buf, cap, &i, *s++);
+            break;
+        }
+        case 'd': {
+            fmt++;
+            int v = va_arg(ap, int);
+            if (v < 0) {
+                buf_put(buf, cap, &i, '-');
+                v = (int)(0u - (uint32_t)v);
+            }
+            buf_putu(buf, cap, &i, (uint32_t)v);
+            break;
+        }
+        case 'u':
+            fmt++;
+            buf_putu(buf, cap, &i, va_arg(ap, uint32_t));
+            break;
+        case 'x':
+            fmt++;
+            buf_putx(buf, cap, &i, va_arg(ap, uint32_t));
+            break;
+        case 'p': {
+            fmt++;
+            uintptr_t p = (uintptr_t)va_arg(ap, void *);
+            const char *pre = "0x";
+            while (*pre)
+                buf_put(buf, cap, &i, *pre++);
+            buf_putx(buf, cap, &i, (uint32_t)p);
+            break;
+        }
+        case 'c':
+            fmt++;
+            buf_put(buf, cap, &i, (char)va_arg(ap, int));
+            break;
+        default:
+            buf_put(buf, cap, &i, '%');
+            break;
+        }
+    }
+
+    if (i < cap)
+        buf[i] = '\0';
+    else if (cap > 0)
+        buf[cap - 1] = '\0';
+
+    va_end(ap);
+    return (int)i;
 }

@@ -19,5 +19,6 @@ void  *tmemmove(void *dst, const void *src, size_t n);
 int    tmemcmp(const void *a, const void *b, size_t n);
 
 void   titoa(uint32_t val, char *buf, int base);
+int    tsprintf(char *buf, size_t n, const char *fmt, ...);
 
 #endif
