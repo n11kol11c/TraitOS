@@ -88,6 +88,13 @@ int main(void)
     argc = tsh_tokenize(line, argv, TSH_ARGV_MAX);
     check("blank", argc == 0 ? "0" : "?", "0");
 
+    strcpy(line, "# a comment");
+    argc = tsh_tokenize(line, argv, TSH_ARGV_MAX);
+    check("comment", argc == 0 ? "0" : "?", "0");
+    strcpy(line, "   # indented comment");
+    argc = tsh_tokenize(line, argv, TSH_ARGV_MAX);
+    check("comment indent", argc == 0 ? "0" : "?", "0");
+
     tsh_hist_clear();
     check("hist empty", tsh_hist_count() == 0 ? "0" : "?", "0");
     check("hist push", tsh_hist_push("ls /") == 1 ? "1" : "?", "1");
@@ -100,6 +107,18 @@ int main(void)
     check("hist[2]", tsh_hist_get(2), "env");
     check("hist oob", tsh_hist_get(3) == NULL ? "null" : "set", "null");
     check("hist oob neg", tsh_hist_get(-1) == NULL ? "null" : "set", "null");
+
+    char hbuf[TSH_HIST_LEN];
+    check("expand !1", tsh_hist_expand("!1", hbuf, sizeof hbuf) == 1 ? "1" : "?",
+          "1");
+    check("expand !1 val", hbuf, "cat /etc/hostname");
+    check("expand !!", tsh_hist_expand("!!", hbuf, sizeof hbuf) == 1 ? "1" : "?",
+          "1");
+    check("expand !! val", hbuf, "env");
+    check("expand !9", tsh_hist_expand("!9", hbuf, sizeof hbuf) == -1 ? "-1" : "?",
+          "-1");
+    check("expand plain", tsh_hist_expand("echo hi", hbuf, sizeof hbuf) == 0 ? "0" : "?",
+          "0");
 
     tsh_env_set("NAME", "traitos");
     check("env_get", tsh_env_get("NAME") ? tsh_env_get("NAME") : "(null)",

@@ -1,6 +1,8 @@
 #ifndef TSH_H
 #define TSH_H
 
+#include <stddef.h>
+
 #define TSH_ARGV_MAX 8
 #define TSH_ARG_MAX  128
 
@@ -17,6 +19,11 @@ int           tsh_hist_push(const char *line);
 int           tsh_hist_count(void);
 const char   *tsh_hist_get(int i);
 void          tsh_hist_clear(void);
+
+/* Expand a leading !n / !! history reference into `out` (outsz bytes).
+ * Returns 1 on expansion, 0 if the line is not a history reference,
+ * -1 if the referenced entry does not exist. */
+int tsh_hist_expand(const char *line, char *out, size_t outsz);
 
 /* Split `line` into argv: whitespace-separated, "double quotes" group,
  * backslash escapes the next char, and $NAME expands from the environment.

@@ -85,6 +85,43 @@ void tsh_hist_clear(void)
     hist_count = 0;
 }
 
+static int parse_num(const char *s, int *out)
+{
+    int v = 0;
+    if (*s == '\0')
+        return 0;
+    while (*s >= '0' && *s <= '9') {
+        v = v * 10 + (*s - '0');
+        s++;
+    }
+    if (*s != '\0')
+        return 0;
+    *out = v;
+    return 1;
+}
+
+int tsh_hist_expand(const char *line, char *out, size_t outsz)
+{
+    const char *p;
+    int idx;
+
+    if (line[0] != '!')
+        return 0;
+    p = line + 1;
+    if (p[0] == '!' && p[1] == '\0') {      /* !! = last command */
+        if (hist_count == 0)
+            return -1;
+        tstrncpy(out, hist_entries[hist_count - 1], outsz);
+        return 1;
+    }
+    if (!parse_num(p, &idx))
+        return 0;
+    if (idx < 0 || idx >= hist_count)
+        return -1;
+    tstrncpy(out, hist_entries[idx], outsz);
+    return 1;
+}
+
 /* ---- tokenizer ---------------------------------------------------------- */
 
 static char arg_buf[TSH_ARGV_MAX][TSH_ARG_MAX];
@@ -132,6 +169,8 @@ int tsh_tokenize(char *line, char **argv, int max)
         while (*p == ' ' || *p == '\t')
             p++;
         if (!*p)
+            break;
+        if (*p == '#')                   /* comment line */
             break;
 
         char *dst = arg_buf[argc];

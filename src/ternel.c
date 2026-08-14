@@ -559,10 +559,21 @@ void ternel_main(uintptr_t mbi)
             if (c == '\n') {
                 vga_putchar('\n');
                 if (line_len > 0) {
-                    tsh_hist_push(line);
-                    hist_pos = tsh_hist_count();
-                    tlog("cmd: %s\n", line);
-                    run_command(line);
+                    char expanded[TSH_HIST_LEN];
+                    int hx = tsh_hist_expand(line, expanded,
+                                             sizeof expanded);
+                    if (hx < 0) {
+                        tprintf(" history: no such entry\n");
+                    } else {
+                        if (hx > 0) {
+                            tstrncpy(line, expanded, 128);
+                            line_len = (int)tstrlen(line);
+                        }
+                        tsh_hist_push(line);
+                        hist_pos = tsh_hist_count();
+                        tlog("cmd: %s\n", line);
+                        run_command(line);
+                    }
                 }
                 line_len = 0;
                 line[0] = '\0';
