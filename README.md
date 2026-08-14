@@ -109,3 +109,257 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
 `die` intentionally divides by zero — the IDT catches it, prints an exception
 report, and the machine halts. It is the closest thing to a panic demo an OS
 can ship.
+
+---
+
+## How it works
+
+### Boot flow
+
+Everything before the first line of C is assembly. TraitOS never uses a boot
+stub beyond what GRUB2 already provides.
+
+```
+ firmware (BIOS/UEFI)
+      │
+      ▼
+ ┌──────────────────────────────────────────────────────────────────┐
+ │ GRUB2 reads the Multiboot2 header (first 8 KiB of traitos.bin),  │
+ │ loads every PT_LOAD segment at its physical address,             │
+ │ zero-fills BSS, and jumps to the ELF entry point.                │
+ └──────────────────────────────────────────────────────────────────┘
+      │  e_entry = _start @ 0x100030  (32-bit protected mode, paging OFF)
+      ▼
+ boot/boot.asm
+   • checks the Multiboot2 magic (0x36D76289)
+   • zeroes the boot page tables (.boot.bss is NOLOAD — GRUB did not fill it)
+   • maps 1 GiB twice: identity (PML4[0]) + higher-half (PML4[511])
+   • enables PAE, sets EFER.LME, loads CR3, flips CR0.PG
+      │
+      ▼
+ long_mode (64-bit)
+   • reloads all data segments from the boot GDT
+   • `mov rax, ternel_main; call rax`  ── the first higher-half C code
+      │
+      ▼
+ src/ternel.c  ternel_main(mbi)
+   • VGA → serial → GDT → IDT/PIC → PIT → keyboard → PMM → VMM → heap
+   • prints the banner and enters the shell loop
+```
+
+### Memory model
+
+The kernel is a **higher-half** kernel: the C code is linked far away from the
+low physical addresses it is loaded at, and a 1 GiB physmap window maps every
+physical page of low memory into the higher half.
+
+```
+  VIRTUAL ADDRESS (per address space)              PHYSICAL
+ ─────────────────────────────────────────      ─────────────────────
+  0xFFFFFFFFC0000000   end of physmap window       first 1 GiB of RAM,
+  0xFFFFFFFF8010F000   kernel .data/.bss      ──►  loaded by GRUB at
+  0xFFFFFFFF8010E000   kernel .rodata                physical 1 MiB
+  0xFFFFFFFF8010A000   kernel .text
+  0xFFFFFFFF80000000   physmap window base      ─►  phys 0x00000000
+ ─────────────────────────────────────────      ─────────────────────
+  0x0000008000000000   first user slot (PML4[1])    (per-process)
+  0x0000000000000000   identity map (shared slot 0) ─► phys 0
+```
+
+Key rules:
+
+- **PML4 slots 0 and 256..511** are the *kernel view*: slot 0 identity-maps low
+  memory (the boot-time stack, VGA, MMIO and the heap live there), slots
+  256..511 map the higher half (kernel image + physmap window).
+- **PML4 slots 1..255** are free for *user space*. Every process gets its own
+  PML4 (`vmm_aspace_create`) with the kernel view cloned in; user pages are
+  mapped into the untouched slots, so one process can never see another's
+  memory — the `aspace` shell command proves it live.
+- **Page tables live in low memory** (`tpmm_alloc_low`), so the kernel can
+  always reach them through the physmap window (`VMM_PHYS_TO_VIRT`) even when
+  CR3 points at a freshly created address space.
+
+### Module map
+
+| Module                       | Role                                                        |
+| ---------------------------- | ----------------------------------------------------------- |
+| `boot/boot.asm`              | Multiboot2 header, boot page tables, long-mode switch, entry |
+| `boot/gdt.asm`               | Boot-time GDT (low) + `gdt_reload` (higher half)             |
+| `boot/isr_stubs.asm`         | 48 assembly interrupt entry stubs                            |
+| `src/ternel.c`               | Entry point, console printf, command interpreter             |
+| `src/tvmm.{c,h}`             | Paging + per-process address spaces (`vmm_aspace_*`)         |
+| `src/tpmm.{c,h}`             | Bitmap physical memory manager, first-fit + `_low`           |
+| `src/tmalloc.{c,h}`          | Kernel heap: first-fit free list + bump growth               |
+| `src/idt.{c,h}`              | IDT gates, PIC remap, IRQ dispatch, exception reports        |
+| `src/timer.{c,h}`            | PIT at 100 Hz, `timer_ticks()`                               |
+| `src/teyboard.{c,h}`         | PS/2 keyboard: set-1 scancodes, shift/caps, ring buffer      |
+| `src/vga.{c,h}`              | VGA text-mode driver (CP437 glyphs)                          |
+| `src/serial.{c,h}`           | COM1 UART + `tlog()` for serial logs                         |
+| `src/gdt.{c,h}`              | GDT reload glue                                              |
+| `src/tstring.{c,h}`          | Dependency-free libc subset (`tstr*`/`tmem*`/`titoa`)        |
+| `linker.ld`                  | Higher-half link script (VMA/LMA split for GRUB)             |
+| `grub.cfg`                   | GRUB2 menu entry                                             |
+| `Makefile` / `build.sh`      | Build system + dependency/ISO/USB wrapper                    |
+
+### Design principles
+
+- **No dependencies.** No libc, no toolchain runtimes — every `strlen`, every
+  `memcpy` is hand-written in `tstring.c`. The toolchain is stock clang + nasm +
+  ld.lld with `-ffreestanding`.
+- **Flat and auditable.** One module per concern in `src/`, t-prefixed symbols,
+  no magic frameworks. If you can read C, you can read this kernel.
+- **Amnesic by construction.** No storage driver is even reachable after boot;
+  the only I/O is VGA, serial, keyboard, PIT and the PIC.
+
+---
+
+## Getting started
+
+### Prerequisites
+
+| Tool         | macOS                                    | Debian/Ubuntu                                |
+| ------------ | ---------------------------------------- | -------------------------------------------- |
+| Compiler     | `clang` (Xcode Command Line Tools)       | `clang`                                      |
+| Linker       | `brew install lld`                       | `apt install lld`                            |
+| Assembler    | `brew install nasm`                      | `apt install nasm`                           |
+| ISO tooling  | `brew install xorriso mtools x86_64-elf-grub` | `apt install xorriso mtools grub-pc-bin grub-common grub-efi-amd64-bin grub-efi-ia32-bin` |
+| Emulator *   | `brew install qemu`                      | `apt install qemu-system-x86`                |
+
+\* Only needed to run the image; **not** required to build it.
+
+### Quick start
+
+```sh
+./build.sh deps       # installs the toolchain for your OS (macOS/Linux)
+./build.sh all        # build kernel + bootable ISO → traitos.iso
+./build.sh run        # boot traitos.iso in QEMU (-serial stdio, 256M)
+```
+
+That is it. Thirty seconds later you are in the TraitOS shell.
+
+### Manual build
+
+```sh
+make                 # just the kernel → traitos.bin
+make iso             # + bootable ISO → traitos.iso
+```
+
+### Run in an emulator
+
+```sh
+./build.sh run
+# equivalent:
+qemu-system-x86_64 -cdrom traitos.iso -serial stdio -m 256M
+```
+
+Add `-no-reboot` if you want to inspect the screen after `die`.
+
+### Boot on real hardware (USB)
+
+**This completely wipes the target device.** Double-check the device name.
+
+```sh
+./build.sh usb /dev/disk2     # macOS  (the ISO is a hybrid image)
+./build.sh usb /dev/sdb       # Linux
+```
+
+If you omit the device, `build.sh` lists your disks and prompts. The ISO is a
+hybrid GRUB2 image, so it boots in BIOS mode everywhere and in UEFI mode via
+the bundled `x86_64-efi` modules.
+
+### `build.sh` reference
+
+| Command                  | What it does                                        |
+| ------------------------ | --------------------------------------------------- |
+| `./build.sh deps`        | Install the toolchain (Homebrew / apt / dnf / pacman) |
+| `./build.sh build`       | Build `traitos.bin`                                 |
+| `./build.sh iso`         | Build `traitos.bin` + `traitos.iso`                 |
+| `./build.sh run`         | Build and boot in QEMU                              |
+| `./build.sh usb [dev]`   | Write `traitos.iso` to a USB stick (erases it)      |
+| `./build.sh clean`       | Remove build artifacts                              |
+| `./build.sh all`         | Default: build kernel + ISO                         |
+
+### Continuous integration
+
+Pushing to GitHub triggers the `build` workflow (`.github/workflows/ci.yml`):
+it installs nasm/lld/grub tooling on Ubuntu, runs `make all`, runs `make iso`,
+and uploads `traitos.iso` as an artifact. If the badge at the top is green,
+the latest push builds clean.
+
+---
+
+## The command line
+
+| Command    | Description                                            |
+| ---------- | ------------------------------------------------------ |
+| `help`     | list available commands                                 |
+| `clear`    | clear the screen                                        |
+| `uptime`   | seconds since boot (100 Hz PIT)                         |
+| `ver`      | kernel version                                          |
+| `info`     | system + memory stats (PMM, heap)                       |
+| `alloc`    | allocate and free 8 physical frames                     |
+| `paging`   | map a frame at a high virtual address, poke it, unmap   |
+| `heap`     | exercise `tmalloc`/`tfree`                              |
+| `aspace`   | create 2 address spaces, show same-VA isolation, teardown |
+| `echo`     | print the rest of the line                              |
+| `die`      | divide by zero — demonstrates the exception handler     |
+
+## Roadmap
+
+| Milestone | Status | Scope |
+| --------- | ------ | ----- |
+| **M0** | Done | Boot, long-mode switch, VGA/serial console, ISO + USB |
+| **M1** | Done | IDT, PIC, PIT, PS/2 keyboard |
+| **M2** | Done | Memory map, bitmap PMM, paging, heap, higher half, address spaces |
+| **M3** | Active | Shell upgrades: history, argv expansion, environment |
+| **M4** | Next   | RAM filesystem (initrd → ramfs/tarfs, VFS) |
+| **M5** | Later  | Security hardening: NX, SMEP/SMAP, W^X, KASLR, RAM scrub |
+| **M6** | Later  | Processes: scheduler, IPC, user mode + syscalls |
+
+Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
+
+---
+
+## Project layout
+
+```
+boot/                  boot-time assembly (boot.asm, gdt.asm, isr_stubs.asm)
+src/                   kernel sources (flat, self-contained modules)
+  ternel.c             entry point + console + command interpreter
+  tstring.{c,h}        libc-string subset (t-prefixed)
+  vga.{c,h}            VGA text-mode driver
+  serial.{c,h}         COM1 UART + tlog()
+  teyboard.{c,h}       PS/2 keyboard
+  gdt.{c,h}            GDT reload glue
+  idt.{c,h}            IDT + PIC remap, IRQ dispatch
+  timer.{c,h}          PIT timer
+  tmalloc.{c,h}        kernel heap
+  tpmm.{c,h}           bitmap physical memory manager
+  tvmm.{c,h}           paging + per-process address spaces
+user/                  userspace programs (planned, M6)
+docs/PLAN.md           detailed architecture + roadmap
+linker.ld              higher-half kernel link script
+grub.cfg               GRUB2 menu config
+Makefile               build system
+build.sh               deps/build/iso/run/usb/clean wrapper
+.github/workflows/     CI (builds kernel + ISO on every push)
+```
+
+## Security posture (honest)
+
+TraitOS defends against **software** tampering and data persistence: no writes
+to the boot media, no swap, no dump, and (from M5) NX/SMEP/SMAP/W^X/KASLR.
+
+It does **not** defend against cold-boot/RAM-dump attacks, hardware
+(evil-maid) tampering, or firmware compromise — because no pure-software OS can
+do that. See [`docs/PLAN.md`](docs/PLAN.md) for the full threat model.
+
+> **Disclaimer:** this is an educational project, not production security
+> software. Do not store secrets on it.
+
+## License
+
+[MIT](LICENSE). Project structure and conventions modeled after
+[KumOS](https://github.com/todorw/KumOS) (GPL-3.0) by a friend — TraitOS is
+x86_64, all source is original, and is licensed MIT.
+
