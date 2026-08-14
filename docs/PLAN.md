@@ -152,12 +152,22 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [ ] Kernel stack guard pages *per task* (own stacks are on the heap now)
 - [ ] Scheduler priority tuning (e.g. idle boost, timeslice scaling)
 
-#### M6b — IPC (next)
-- [ ] Mailbox/queue between tasks (`send`/`recv`), blocking with wakeup
-- [ ] Mutex/semaphore on top of the scheduler
-- [ ] Shell demo commands (`ipc`, `mutex`)
+#### M6b — IPC (done, v0.10.0)
+- [x] Blocking state (`TTASK_BLOCKED`) + `ttask_block()`/`ttask_wake()`/
+      `ttask_self()`; pick already skips non-READY slots (host-tested)
+- [x] Pure IPC core in `tipc_core.h`: bounded message ring, FIFO wait
+      queues, recursive mutex — all host-tested by `make smoke`
+      (`tests/ipc_smoke.c`, 108 checks)
+- [x] Kernel wrappers in `tipc.c`: `tipc_send`/`tipc_recv` block when the
+      ring is full/empty, `tipc_mutex_lock`/`unlock` with FIFO wakeups;
+      every primitive runs under a cli/sti critical section and
+      registration+block is atomic, so no wake is ever lost
+- [x] Shell demos: `ipc` (100 messages delivered in order with stamped
+      sender ids, blocking send+recv) and `mutex` (3 tasks × 5000
+      increments must land on exactly 15000)
+- [ ] Semaphore (counting) on top of the mutex primitives
 
-#### M6c — User mode + syscalls (later)
+#### M6c — User mode + syscalls (next)
 - [ ] TSS with ring-3 stacks; switch to user mode via `iretq`
 - [ ] `syscall`/`sysret` (or `int 0x80`) entry with a minimal syscall table
 - [ ] User ELF loader + `user/` programs (shell, demos)

@@ -7,5 +7,7 @@ their embedded blobs will live here.
 Until then the interactive shell lives in-kernel (`src/ternel.c` line editor
 + command table, `src/tsh.c` tokenizer/env/history), so the TUI shell you see
 today is ring-0. M6a (already in) adds a preemptive round-robin kernel
-scheduler on top of that shell task; M6c splits the shell into a ring-3
+scheduler on top of that shell task; M6b (already in) adds blocking IPC —
+mailboxes with `send`/`recv` and a recursive mutex — so kernel tasks can
+park themselves and wake each other. M6c splits the shell into a ring-3
 process.
