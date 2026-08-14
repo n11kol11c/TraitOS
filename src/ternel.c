@@ -73,7 +73,7 @@ static void print_prompt(void)
     prompt_row = vga_get_row();   /* prompt always starts at col 0 */
 }
 
-static void redraw_line(const char *line, int len)
+static void redraw_line(const char *line, int len, int cursor)
 {
     int rows = (len + 6 + VGA_WIDTH - 1) / VGA_WIDTH;   /* prompt + line */
     if (rows < 1)
@@ -86,6 +86,14 @@ static void redraw_line(const char *line, int len)
     vga_set_cursor(0, prompt_row);
     vga_puts("   > ");
     vga_puts(line);
+    vga_set_cursor((6 + cursor) % VGA_WIDTH,
+                   prompt_row + (6 + cursor) / VGA_WIDTH);
+}
+
+static void place_cursor(int cursor)
+{
+    vga_set_cursor((6 + cursor) % VGA_WIDTH,
+                   prompt_row + (6 + cursor) / VGA_WIDTH);
 }
 
 static void cmd_hist(int argc, char **argv)
@@ -514,6 +522,7 @@ void ternel_main(uintptr_t mbi)
 {
     char line[128];
     int line_len = 0;
+    int cursor = 0;
     uint32_t last_sec = 0;
 
     line[0] = '\0';
@@ -576,20 +585,51 @@ void ternel_main(uintptr_t mbi)
                     }
                 }
                 line_len = 0;
+                cursor = 0;
                 line[0] = '\0';
                 print_prompt();
             } else if (c == '\b') {
-                if (line_len > 0) {
+                if (cursor > 0) {
+                    tmemmove(line + cursor - 1, line + cursor,
+                             (size_t)(line_len - cursor) + 1);
                     line_len--;
                     line[line_len] = '\0';
-                    vga_puts("\b \b");
+                    cursor--;
+                    hist_pos = tsh_hist_count();
+                    redraw_line(line, line_len, cursor);
                 }
+            } else if (c == KEY_DEL) {
+                if (cursor < line_len) {
+                    tmemmove(line + cursor, line + cursor + 1,
+                             (size_t)(line_len - cursor));
+                    line_len--;
+                    line[line_len] = '\0';
+                    hist_pos = tsh_hist_count();
+                    redraw_line(line, line_len, cursor);
+                }
+            } else if (c == KEY_LEFT) {
+                if (cursor > 0) {
+                    cursor--;
+                    place_cursor(cursor);
+                }
+            } else if (c == KEY_RIGHT) {
+                if (cursor < line_len) {
+                    cursor++;
+                    place_cursor(cursor);
+                }
+            } else if (c == KEY_HOME) {
+                cursor = 0;
+                place_cursor(cursor);
+            } else if (c == KEY_END) {
+                cursor = line_len;
+                place_cursor(cursor);
             } else if (c == KEY_UP) {
                 if (hist_pos > 0) {
                     hist_pos--;
                     tstrncpy(line, tsh_hist_get(hist_pos), 128);
                     line_len = (int)tstrlen(line);
-                    redraw_line(line, line_len);
+                    cursor = line_len;
+                    redraw_line(line, line_len, cursor);
                 }
             } else if (c == KEY_DOWN) {
                 if (hist_pos < tsh_hist_count()) {
@@ -601,12 +641,25 @@ void ternel_main(uintptr_t mbi)
                         tstrncpy(line, tsh_hist_get(hist_pos), 128);
                         line_len = (int)tstrlen(line);
                     }
-                    redraw_line(line, line_len);
+                    cursor = line_len;
+                    redraw_line(line, line_len, cursor);
                 }
             } else if (c >= 32 && line_len < 127) {
-                line[line_len++] = (char)c;
-                line[line_len] = '\0';
-                vga_putchar((char)c);
+                hist_pos = tsh_hist_count();
+                if (cursor == line_len) {
+                    line[line_len++] = (char)c;
+                    line[line_len] = '\0';
+                    cursor++;
+                    vga_putchar((char)c);
+                } else {
+                    tmemmove(line + cursor + 1, line + cursor,
+                             (size_t)(line_len - cursor) + 1);
+                    line[cursor] = (char)c;
+                    line_len++;
+                    line[line_len] = '\0';
+                    cursor++;
+                    redraw_line(line, line_len, cursor);
+                }
             }
         }
     }

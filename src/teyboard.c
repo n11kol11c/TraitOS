@@ -49,6 +49,10 @@ static const char scancode_shifted[128] = {
 #define SCAN_ARROW_DOWN 0x50
 #define SCAN_ARROW_LEFT 0x4B
 #define SCAN_ARROW_RIGHT 0x4D
+#define SCAN_HOME 0x47
+#define SCAN_END  0x4F
+#define SCAN_INS  0x52
+#define SCAN_DEL  0x53
 
 static volatile char key_buffer[KEY_BUFFER_SIZE];
 static volatile size_t key_head = 0;
@@ -116,6 +120,18 @@ static void teyboard_callback(registers_t *r)
             break;
         case SCAN_ARROW_RIGHT:
             key_buffer_push((char)KEY_RIGHT);
+            break;
+        case SCAN_HOME:
+            key_buffer_push((char)KEY_HOME);
+            break;
+        case SCAN_END:
+            key_buffer_push((char)KEY_END);
+            break;
+        case SCAN_INS:
+            key_buffer_push((char)KEY_INS);
+            break;
+        case SCAN_DEL:
+            key_buffer_push((char)KEY_DEL);
             break;
         default:
             break;                         /* other E0 keys, drop */
