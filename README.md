@@ -7,13 +7,20 @@
 Boots from a USB stick, loads entirely into RAM, and **vanishes on power-off**.
 No disk writes. No forensic trail. Just you and the kernel.
 
+[![Build](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-v0.10.0-blueviolet)](https://github.com/n11kol11c/TraitOS/releases)
 [![Platform](https://img.shields.io/badge/Platform-x86__64-blue.svg)]()
 [![Language](https://img.shields.io/badge/Language-C11%20+%20NASM-lightgrey.svg)]()
 [![Boot](https://img.shields.io/badge/Boot-GRUB2%20Multiboot2-green.svg)]()
 [![Memory](https://img.shields.io/badge/Memory-Higher--Half%20kernel-brightgreen.svg)]()
 [![RAM-resident](https://img.shields.io/badge/RAM--resident-Yes-brightgreen.svg)]()
-[![Build](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml)
+
+[![Milestone](https://img.shields.io/badge/milestone-M6b%20IPC-blue)](https://github.com/n11kol11c/TraitOS/blob/main/docs/PLAN.md)
+[![Multitasking](https://img.shields.io/badge/multitasking-preemptive%20round--robin-orange)]()
+[![IPC](https://img.shields.io/badge/ipc-mailboxes%20%2B%20mutex-yellow)]()
+[![Security](https://img.shields.io/badge/security-NX%20W%5EX%20SMEP%20SMAP%20KASLR-informational)]()
+[![Tests](https://img.shields.io/badge/tests-5%20suites%2C%20no%20emulator-brightgreen)]()
 
 **Runs on real hardware (BIOS + UEFI) and in emulators — no libc, no runtime, no dependencies.**
 
@@ -36,6 +43,14 @@ It boots through **GRUB2 / Multiboot2** on both **BIOS and UEFI**, switches to
 long mode from assembly, and hands control to a higher-half C kernel with its
 own physical memory manager, paging, per-process address spaces, a heap, and a
 RAM filesystem — all surfaced through an interactive TUI shell.
+
+| | | | |
+|---|---|---|---|
+| **Architecture** | x86_64, long mode | **Boot** | GRUB2 / Multiboot2, BIOS + UEFI |
+| **Language** | C11 (clang, freestanding) + NASM | **Kernel** | Higher-half, non-relocatable image w/ physical KASLR |
+| **Memory** | Bitmap PMM, paging, per-process address spaces | **Storage** | None — initrd → ramfs, RAM-resident |
+| **Multitasking** | Preemptive round-robin (PIT, 100 Hz) | **IPC** | Blocking mailboxes + recursive mutex |
+| **Security** | NX, W^X, SMEP/SMAP, KASLR, stack guard, RAM scrub | **Verification** | 5 host-side smoke suites + CI, no emulator |
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
 > M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), M5 (security
