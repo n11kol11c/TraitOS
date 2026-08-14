@@ -61,6 +61,21 @@ int main(void)
     st[4] = TTASK_EXITED;
     check(ttask_pick_index(0, st, pr, N) == 6, "exited skipped");
 
+    printf("  -- blocked tasks are skipped --\n");
+    for (int i = 0; i < N; i++) {
+        st[i] = TTASK_FREE;
+        pr[i] = 0;
+    }
+    st[2] = TTASK_BLOCKED;
+    st[6] = TTASK_BLOCKED;
+    st[3] = TTASK_READY;
+    check(ttask_pick_index(0, st, pr, N) == 3, "only ready task picked");
+    st[1] = TTASK_READY;
+    check(ttask_pick_index(0, st, pr, N) == 1, "first ready after current");
+    check(ttask_pick_index(3, st, pr, N) == 1, "blocked slots never picked");
+    st[2] = TTASK_READY;
+    check(ttask_pick_index(0, st, pr, N) == 1, "woken task joins rotation");
+
     printf("  -- current is the only ready task --\n");
     for (int i = 0; i < N; i++)
         st[i] = TTASK_FREE;

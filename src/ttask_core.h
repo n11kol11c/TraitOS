@@ -7,8 +7,9 @@
 
 /* Round-robin pick over a fixed task array: scan starting just after
  * `current`, preferring higher priority, and return the index of the best
- * READY task. Returns -1 when nothing is ready. Pure (no kernel state) so
- * `make smoke` verifies the exact scheduling math the kernel uses. */
+ * READY task. Exited and blocked tasks are skipped. Returns -1 when nothing
+ * is ready. Pure (no kernel state) so `make smoke` verifies the exact
+ * scheduling math the kernel uses. */
 static inline int ttask_pick_index(int current, const uint8_t *state,
                                    const uint8_t *prio, int count)
 {

@@ -10,12 +10,14 @@
 
 typedef void (*ttask_fn_t)(void *arg);
 
-/* Scheduler states. TTASK_FREE slots are reusable. */
+/* Scheduler states. TTASK_FREE slots are reusable; TTASK_BLOCKED tasks are
+ * parked on an IPC primitive until ttask_wake() makes them runnable again. */
 enum {
     TTASK_FREE = 0,
     TTASK_READY,
     TTASK_RUNNING,
     TTASK_EXITED,
+    TTASK_BLOCKED,
 };
 
 /* A schedulable kernel task. `context` is the saved stack pointer that
@@ -40,6 +42,14 @@ ttask_t *ttask_create(const char *name, ttask_fn_t fn, void *arg);
 
 void ttask_yield(void);
 void ttask_exit(void) __attribute__((noreturn));
+
+/* Blocking support (M6b IPC): ttask_block() parks the calling task until
+ * ttask_wake() marks it runnable again. ttask_wake() must be called with
+ * interrupts disabled (the IPC module holds a critical section). */
+#define TTASK_SELF_NONE 0xFFFFFFFFu
+uint32_t ttask_self(void);
+void ttask_block(void);
+void ttask_wake(uint32_t id);
 
 /* Called from the PIT handler; preempts the current task. */
 void ttask_tick(void);
