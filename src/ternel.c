@@ -14,6 +14,7 @@
 #include "tvmm.h"
 #include "tsec.h"
 #include "ttask.h"
+#include "tipc.h"
 #include "tfs.h"
 #include "tsh.h"
 
@@ -281,6 +282,150 @@ static void cmd_yield(int argc, char **argv)
     tprintf(" back in shell\n");
 }
 
+/* ---- M6b IPC demos ---------------------------------------------------- */
+
+#define IPC_DEMO_MSGS 100
+#define MUTEX_TASKS   3
+#define MUTEX_ITERS   5000
+
+struct ipc_demo {
+    tipc_mailbox_t mb;
+    volatile int   active;
+    volatile int   ok;
+    volatile uint32_t delivered;
+};
+
+struct mutex_demo {
+    tipc_mutex_t   m;
+    volatile uint32_t counter;
+    volatile int   active;
+};
+
+static void demo_done(volatile int *active)
+{
+    __asm__ volatile("cli");
+    (*active)--;
+    __asm__ volatile("sti");
+}
+
+/* Producer: push 0..N-1 through the mailbox, blocking whenever the ring is
+ * full (proves blocking send). */
+static void ipc_writer(void *arg)
+{
+    struct ipc_demo *d = (struct ipc_demo *)arg;
+    tipc_msg_t m;
+    for (uint32_t i = 0; i < IPC_DEMO_MSGS; i++) {
+        tmemcpy(m.data, &i, sizeof i);
+        m.len = (uint32_t)sizeof i;
+        if (tipc_send(&d->mb, &m) != 0) {
+            d->ok = 0;
+            break;
+        }
+    }
+    demo_done(&d->active);
+}
+
+/* Consumer: pull all N messages, verifying sequence and sender ids (proves
+ * blocking recv + FIFO delivery). */
+static void ipc_reader(void *arg)
+{
+    struct ipc_demo *d = (struct ipc_demo *)arg;
+    tipc_msg_t m;
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < IPC_DEMO_MSGS; i++) {
+        if (tipc_recv(&d->mb, &m) != 0) {
+            d->ok = 0;
+            break;
+        }
+        uint32_t v;
+        tmemcpy(&v, m.data, sizeof v);
+        if (v != i || m.len != sizeof v || m.sender == 0)
+            d->ok = 0;
+        sum += v;
+        d->delivered = i + 1;
+    }
+    if (sum != (uint32_t)(IPC_DEMO_MSGS * (IPC_DEMO_MSGS - 1)) / 2)
+        d->ok = 0;
+    demo_done(&d->active);
+}
+
+static void cmd_ipc(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    struct ipc_demo *d = (struct ipc_demo *)tmalloc(sizeof *d);
+    if (!d) {
+        tprintf(" out of memory\n");
+        return;
+    }
+    if (tipc_mailbox_init(&d->mb) != 0) {
+        tprintf(" mailbox init failed\n");
+        tfree(d);
+        return;
+    }
+    d->active = 2;
+    d->ok = 1;
+    d->delivered = 0;
+    tprintf(" ipc: spawning writer + reader (%u messages)\n", IPC_DEMO_MSGS);
+    if (!ttask_create("ipc-writer", ipc_writer, d) ||
+        !ttask_create("ipc-reader", ipc_reader, d)) {
+        tprintf(" spawn failed (task table full)\n");
+        return;                       /* orphaned task keeps running on d */
+    }
+    while (d->active > 0)
+        ttask_yield();
+    tprintf(" ipc: %u/%u delivered, sum ok: %s\n", d->delivered, IPC_DEMO_MSGS,
+            d->ok ? "yes" : "NO (CHECK FAILED)");
+    tfree(d);
+}
+
+/* Worker: hammer a shared counter through the mutex; if mutual exclusion
+ * fails, preemption loses updates and the final count comes up short. */
+static void mutex_worker(void *arg)
+{
+    struct mutex_demo *d = (struct mutex_demo *)arg;
+    for (int i = 0; i < MUTEX_ITERS; i++) {
+        tipc_mutex_lock(&d->m);
+        d->counter++;
+        tipc_mutex_unlock(&d->m);
+    }
+    demo_done(&d->active);
+}
+
+static void cmd_mutex(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    struct mutex_demo *d = (struct mutex_demo *)tmalloc(sizeof *d);
+    if (!d) {
+        tprintf(" out of memory\n");
+        return;
+    }
+    if (tipc_mutex_init(&d->m) != 0) {
+        tprintf(" mutex init failed\n");
+        tfree(d);
+        return;
+    }
+    d->counter = 0;
+    d->active = MUTEX_TASKS;
+    tprintf(" mutex: %d tasks incrementing a shared counter x%d\n",
+            MUTEX_TASKS, MUTEX_ITERS);
+    for (int i = 0; i < MUTEX_TASKS; i++) {
+        char name[TTASK_NAME_LEN];
+        tsprintf(name, sizeof name, "mx%d", i);
+        if (!ttask_create(name, mutex_worker, d)) {
+            tprintf(" spawn failed (task table full)\n");
+            return;
+        }
+    }
+    while (d->active > 0)
+        ttask_yield();
+    uint32_t expect = (uint32_t)MUTEX_TASKS * MUTEX_ITERS;
+    tprintf(" mutex: counter = %u (expected %u): %s\n", d->counter, expect,
+            d->counter == expect ? "exclusion ok" : "EXCLUSION FAILED");
+    tfree(d);
+}
+
 /* ---- command interpreter --------------------------------------------- */
 
 static void cmd_help(int argc, char **argv);
@@ -306,6 +451,8 @@ static void cmd_tasks(int argc, char **argv);
 static void cmd_spawn(int argc, char **argv);
 static void cmd_burst(int argc, char **argv);
 static void cmd_yield(int argc, char **argv);
+static void cmd_ipc(int argc, char **argv);
+static void cmd_mutex(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
 static void cmd_cat(int argc, char **argv);
 static void cmd_mkdir(int argc, char **argv);
@@ -342,6 +489,8 @@ static const struct {
     { "spawn",  cmd_spawn,  "spawn a demo task" },
     { "burst",  cmd_burst,  "spawn N demo tasks" },
     { "yield",  cmd_yield,  "yield the CPU to another task" },
+    { "ipc",    cmd_ipc,    "mailbox demo: writer/reader block on a shared queue" },
+    { "mutex",  cmd_mutex,  "mutex demo: 3 tasks share a protected counter" },
     { "ls",     cmd_ls,     "list a directory (default /)" },
     { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
     { "mkdir",  cmd_mkdir,  "create a directory" },
@@ -728,6 +877,7 @@ void ternel_main(uintptr_t mbi)
          sec_stack_guard_enabled() ? "on" : "off");
     tlog("scheduler: preemptive round-robin @ %u Hz, %d tasks\n",
          (uint32_t)timer_hz(), ttask_count());
+    tlog("ipc: mailboxes + recursive mutex ready (blocking send/recv/lock)\n");
 
     tprintf("===============================================\n");
     tprintf(" TraitOS v0.9.1 - RAM-resident, amnesic OS\n");
