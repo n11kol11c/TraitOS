@@ -12,6 +12,7 @@
 #include "tstring.h"
 #include "tpmm.h"
 #include "tvmm.h"
+#include "tfs.h"
 
 /* Kernel console printf (KumOS-style, VGA only; use tlog() for serial). */
 static void tprintf(const char *fmt, ...)
@@ -73,6 +74,13 @@ static void cmd_heap(int argc, char **argv);
 static void cmd_echo(int argc, char **argv);
 static void cmd_die(int argc, char **argv);
 static void cmd_aspace(int argc, char **argv);
+static void cmd_ls(int argc, char **argv);
+static void cmd_cat(int argc, char **argv);
+static void cmd_mkdir(int argc, char **argv);
+static void cmd_touch(int argc, char **argv);
+static void cmd_rm(int argc, char **argv);
+static void cmd_write(int argc, char **argv);
+static void cmd_mount(int argc, char **argv);
 
 static const struct {
     const char *name;
@@ -90,6 +98,13 @@ static const struct {
     { "echo",   cmd_echo,   "print the rest of the line" },
     { "die",    cmd_die,    "divide by zero (panic demo)" },
     { "aspace", cmd_aspace, "demo per-process address spaces (page tables)" },
+    { "ls",     cmd_ls,     "list a directory (default /)" },
+    { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
+    { "mkdir",  cmd_mkdir,  "create a directory" },
+    { "touch",  cmd_touch,  "create an empty file" },
+    { "rm",     cmd_rm,     "remove a file or directory" },
+    { "write",  cmd_write,  "write text into a file" },
+    { "mount",  cmd_mount,  "list mounted filesystems" },
 };
 
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
@@ -121,7 +136,7 @@ static void cmd_ver(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    tprintf(" TraitOS v0.5.0 (x86_64, Multiboot2)\n");
+    tprintf(" TraitOS v0.6.0 (x86_64, Multiboot2)\n");
 }
 
 static void cmd_info(int argc, char **argv)
@@ -280,6 +295,127 @@ static void cmd_aspace(int argc, char **argv)
     tprintf(" spaces torn down, frames returned\n");
 }
 
+static void print_node(tfs_node_t *node)
+{
+    tprintf(" %s %u  %s%s\n", node->type == TFS_DIR ? "drw-" : "-rw-",
+            (uint32_t)node->size, node->name,
+            node->type == TFS_DIR ? "/" : "");
+}
+
+static void cmd_ls(int argc, char **argv)
+{
+    const char *path = argc > 1 ? argv[1] : "/";
+    tfs_node_t *node = tfs_lookup(path);
+    if (!node) {
+        tprintf(" ls: '%s': not found\n", path);
+        return;
+    }
+    if (node->type == TFS_DIR)
+        tfs_list(node, print_node);
+    else
+        print_node(node);
+}
+
+static void cmd_cat(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: cat <path>\n");
+        return;
+    }
+    tfs_node_t *node = tfs_lookup(argv[1]);
+    if (!node) {
+        tprintf(" cat: '%s': not found\n", argv[1]);
+        return;
+    }
+    if (node->type == TFS_DIR) {
+        tprintf(" cat: '%s' is a directory\n", argv[1]);
+        return;
+    }
+    if (node->gen) {
+        char buf[256];
+        node->gen(node, buf, sizeof buf);
+        for (uint32_t i = 0; i < (uint32_t)node->size; i++)
+            vga_putchar(buf[i]);
+    } else if (node->data) {
+        for (uint32_t i = 0; i < (uint32_t)node->size; i++)
+            vga_putchar(node->data[i]);
+    }
+}
+
+static void cmd_mkdir(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: mkdir <path>\n");
+        return;
+    }
+    tprintf(tfs_mkdir(argv[1]) ? " ok\n" : " mkdir: '%s': failed or exists\n",
+            argv[1]);
+}
+
+static void cmd_touch(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: touch <path>\n");
+        return;
+    }
+    tprintf(tfs_touch(argv[1]) ? " ok\n" : " touch: '%s': failed or exists\n",
+            argv[1]);
+}
+
+static void cmd_rm(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: rm <path>\n");
+        return;
+    }
+    tfs_node_t *node = tfs_lookup(argv[1]);
+    if (!node || tfs_rm(node) != 0)
+        tprintf(" rm: '%s': failed\n", argv[1]);
+    else
+        tprintf(" ok\n");
+}
+
+static void cmd_write(int argc, char **argv)
+{
+    if (argc < 3) {
+        tprintf(" usage: write <path> <text>\n");
+        return;
+    }
+    tfs_node_t *node = tfs_lookup(argv[1]);
+    if (!node) {
+        tprintf(" write: '%s': not found\n", argv[1]);
+        return;
+    }
+    char text[128];
+    size_t len = 0;
+    for (int i = 2; i < argc && len < sizeof text - 1; i++) {
+        if (i > 2 && len < sizeof text - 1)
+            text[len++] = ' ';
+        size_t l = tstrlen(argv[i]);
+        if (len + l > sizeof text - 1)
+            l = sizeof text - 1 - len;
+        tmemcpy(text + len, argv[i], l);
+        len += l;
+    }
+    text[len] = '\0';
+    if (tfs_write(node, text, len) == 0)
+        tprintf(" ok (%u bytes)\n", (uint32_t)len);
+    else
+        tprintf(" write: '%s' is not writable\n", argv[1]);
+}
+
+static void print_mount(const char *name, tfs_node_t *node)
+{
+    tprintf("  %s  ->  %s\n", name, node->name);
+}
+
+static void cmd_mount(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tfs_mount_list(print_mount);
+}
+
 static int tokenize(char *line, char **argv, int max)
 {
     int argc = 0;
@@ -331,13 +467,17 @@ void ternel_main(uintptr_t mbi)
     teyboard_init();
     tpmm_init(mbi);
     vmm_init();
+    tfs_init();
+    tfs_procfs_init();
+    tfs_sysfs_init();
+    tfs_load_initrd(mbi);
 
-    tlog("TraitOS v0.5.0 booted on x86_64\n");
+    tlog("TraitOS v0.6.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
 
     tprintf("===============================================\n");
-    tprintf(" TraitOS v0.5.0 - RAM-resident, amnesic OS\n");
+    tprintf(" TraitOS v0.6.0 - RAM-resident, amnesic OS\n");
     tprintf("===============================================\n\n");
 
     tprintf(" Type 'help' for a list of commands.\n");
