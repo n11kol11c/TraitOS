@@ -121,9 +121,53 @@ void ttask_yield(void)
 {
     if (!scheduler_ready)
         return;
+    unsigned long flags;
+    __asm__ volatile("pushfq; popq %0" : "=r"(flags));
     __asm__ volatile("cli");
     ttask_pick_switch();
-    __asm__ volatile("sti");
+    if (flags & (1ul << 9))
+        __asm__ volatile("sti");
+}
+
+uint32_t ttask_self(void)
+{
+    if (!scheduler_ready || !current_task)
+        return TTASK_SELF_NONE;
+    return (uint32_t)(current_task - tasks);
+}
+
+/* Park the calling task until ttask_wake() makes it runnable again. The
+ * caller holds a critical section; registration (waiter list) and the state
+ * flip happen atomically so no wake can be lost in between. */
+void ttask_block(void)
+{
+    if (!scheduler_ready || !current_task)
+        return;
+    unsigned long flags;
+    __asm__ volatile("pushfq; popq %0" : "=r"(flags));
+    __asm__ volatile("cli");
+    current_task->state = TTASK_BLOCKED;
+    ttask_t *next = ttask_pick_next();
+    if (!next || next == current_task) {
+        current_task->state = TTASK_READY;   /* nobody else runnable */
+        if (flags & (1ul << 9))
+            __asm__ volatile("sti");
+        return;
+    }
+    next_task = next;
+    ttask_switch_ctx();                       /* resumes on wake */
+    if (flags & (1ul << 9))
+        __asm__ volatile("sti");
+}
+
+/* Mark a blocked task runnable. Must be called with interrupts disabled
+ * (the IPC module wakes from inside its critical section). */
+void ttask_wake(uint32_t id)
+{
+    if (id >= TTASK_MAX_TASKS)
+        return;
+    if (tasks[id].state == TTASK_BLOCKED)
+        tasks[id].state = TTASK_READY;
 }
 
 void ttask_exit(void) __attribute__((noreturn));
