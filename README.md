@@ -7,8 +7,9 @@ and it is gone. Built with C and x86_64 assembly, boots via **GRUB2
 
 > **Status:** interactive console with a command line (`help`, `clear`,
 > `uptime`, `info`, `alloc`, `paging`, `heap`, `die`...) and M2 mostly done:
-> Multiboot2 memory map, bitmap PMM, `vmm` paging (map/unmap), and a real
-> kernel heap (`tmalloc`).
+> Multiboot2 memory map, bitmap PMM, `vmm` paging (map/unmap), a real
+> kernel heap (`tmalloc`), and a **higher-half kernel** linked at
+> `0xFFFFFFFF80000000` (loaded low by GRUB, mapped by boot.asm).
 > **Disclaimer:** educational project, *not* production security software.
 
 ## Goals
@@ -77,7 +78,7 @@ src/                   kernel sources (flat modules)
   timer.{c,h}          PIT timer
   tmalloc.{c,h}        heap (stub)
 user/                  userspace programs (planned, M6)
-linker.ld              kernel link script (loads at 1 MiB)
+linker.ld              kernel link script (loads at 1 MiB, links higher-half)
 grub.cfg               GRUB2 menu config
 Makefile               build system
 build.sh               deps/build/iso/run/usb/clean wrapper
@@ -89,7 +90,7 @@ docs/PLAN.md           detailed architecture + roadmap
 
 1. Boot + console (this milestone)
 2. Interrupts: IDT, PIC/APIC, PIT, PS/2 keyboard
-3. Memory management: Multiboot2 memory map, bitmap PMM, paging, heap
+3. Memory management: Multiboot2 memory map, bitmap PMM, paging, heap, higher-half
 4. TUI: input, line editor, command interpreter
 5. RAM rootfs: initrd in RAM (tarfs), no persistent mounts
 6. Security hardening: NX, SMEP/SMAP, W^X, KASLR, strict syscall surface

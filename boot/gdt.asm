@@ -1,9 +1,13 @@
 ; TraitOS — boot-time GDT + segment reload helper
 ; Mirrors KumOS's gdt_flush.asm: a separate asm module for GDT work.
+;
+; gdt64 / gdt64_ptr are linked LOW (.boot) because boot.asm executes an lgdt
+; while still in 32-bit mode (addresses truncated to 32 bits). gdt_reload()
+; runs in the higher-half kernel (.text).
 
 BITS 32
 
-section .rodata
+section .boot
 align 8
 global gdt64
 gdt64:

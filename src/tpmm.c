@@ -14,7 +14,8 @@ static uint32_t total_frames = 0;
 static uint32_t free_frames = 0;
 static uint32_t first_free_hint = 0;
 
-extern char _kernel_end[];
+extern char _kernel_phys_start[];
+extern char _kernel_phys_end[];
 
 /* Multiboot2 memory map tag */
 #define MB2_TAG_MMAP     6
@@ -112,7 +113,8 @@ void tpmm_init(uintptr_t mbi)
 
     /* keep the 1 MiB low region and the loaded kernel image out of the heap */
     reserve_region(0x00000000, 0x100000);
-    reserve_region(0x100000, (uintptr_t)_kernel_end - 0x100000);
+    reserve_region((uintptr_t)_kernel_phys_start,
+                   (uintptr_t)_kernel_phys_end - (uintptr_t)_kernel_phys_start);
 }
 
 uintptr_t tpmm_alloc(void)

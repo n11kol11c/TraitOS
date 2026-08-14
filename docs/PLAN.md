@@ -74,7 +74,9 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [x] Bitmap **PMM** with page alloc/free (`src/tpmm.c`), first-fit scan
 - [x] `vmm` paging: map/unmap 4 KiB pages on the boot identity map (`src/tvmm.c`)
 - [x] Heap (`tmalloc`) on top of PMM: first-fit free list + bump grow (`src/tmalloc.c`)
-- [ ] Higher-half kernel mapping; user/kernel page tables
+- [x] Higher-half kernel: linked at `0xFFFFFFFF80000000`, loaded low by GRUB,
+      boot.asm maps 1 GiB (identity + higher half) before entering `ternel_main`
+- [ ] User/kernel page tables (per-process address spaces)
 
 ### M3 — TUI shell
 - [x] Kernel command line: `help`, `clear`, `uptime`, `ver`, `info`, `alloc`,

@@ -42,7 +42,7 @@ boot/%.o: boot/%.asm
 src/%.o: src/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-traitos.bin: $(KERN_OBJS)
+traitos.bin: $(KERN_OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(KERN_OBJS) -o $@
 	@echo "Kernel: $$(ls -lh $@ | awk '{print $$5}')"
 

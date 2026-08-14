@@ -1,11 +1,18 @@
-; TraitOS — boot entry (x86_64, Multiboot2)
+; TraitOS — boot entry (x86_64, Multiboot2, higher-half kernel)
 ; Mirrors KumOS's boot/ layout: boot.asm holds the entry + long-mode switch,
 ; gdt.asm holds the boot-time GDT.
+;
+; The C kernel is linked at KERNEL_VBASE (higher half). This file runs at its
+; physical load address (1 MiB, identity-mapped) and, once paging is on, maps
+; [KERNEL_VBASE, KERNEL_VBASE + 1 GiB) onto physical 0..1 GiB before entering
+; the higher-half kernel via ternel_main().
 
 BITS 32
 
 GDT_CODE equ 0x08
 GDT_DATA equ 0x10
+
+KERNEL_VBASE equ 0xFFFFFFFF80000000
 
 section .multiboot
 align 8
@@ -29,7 +36,7 @@ mb_header_start:
     dd 8
 mb_header_end:
 
-section .bss
+section .boot.bss nobits
 align 4096
 p4_table:
     resb 4096
@@ -37,11 +44,15 @@ p3_table:
     resb 4096
 p2_table:
     resb 4096
+p3_high:
+    resb 4096
+p2_high:
+    resb 4096
 stack_bottom:
     resb 16384
 stack_top:
 
-section .text
+section .boot
 global _start
 extern gdt64_ptr
 extern ternel_main
@@ -53,6 +64,7 @@ _start:
     cmp eax, 0x36d76289
     jne .halt
 
+    call zero_boot_tables
     call setup_paging
     lgdt [gdt64_ptr]
     jmp GDT_CODE:long_mode
@@ -62,7 +74,21 @@ _start:
     hlt
     jmp .halt
 
-; Identity-map the first 1 GiB with 2 MiB pages, enable PAE and long mode.
+; .boot.bss is a NOLOAD section, so its memory is not guaranteed zeroed.
+; Clear all five page tables before use (5 * 1024 dwords).
+zero_boot_tables:
+    mov ecx, 0
+    mov edi, p4_table
+.ztab:
+    mov dword [edi + ecx * 4], 0
+    inc ecx
+    cmp ecx, 5120
+    jne .ztab
+    ret
+
+; Identity-map the first 1 GiB (2 MiB pages) and map the higher-half region
+; [KERNEL_VBASE, KERNEL_VBASE + 1 GiB) onto the same physical 0..1 GiB.
+; PML4[511] PDPT[510] PD[0..511] => VIRT 0xFFFFFFFF80000000 + i*2M -> phys i*2M.
 setup_paging:
     mov eax, p3_table
     or eax, 0x3                          ; present | writable
@@ -81,6 +107,25 @@ setup_paging:
     inc ecx
     cmp ecx, 512
     jne .set_entry
+
+    ; higher half
+    mov eax, p3_high
+    or eax, 0x3
+    mov [p4_table + 511 * 8], eax
+
+    mov eax, p2_high
+    or eax, 0x3
+    mov [p3_high + 510 * 8], eax
+
+    mov ecx, 0
+.set_high:
+    mov eax, ecx
+    shl eax, 21
+    or eax, 0x83
+    mov [p2_high + ecx * 8], eax
+    inc ecx
+    cmp ecx, 512
+    jne .set_high
 
     ; PAE on
     mov eax, cr4
@@ -105,7 +150,7 @@ setup_paging:
     ret
 
 BITS 64
-section .text
+section .boot
 long_mode:
     mov ax, GDT_DATA
     mov ds, ax
@@ -119,7 +164,8 @@ long_mode:
 
     mov rdi, rbx                         ; rdi = multiboot2 info pointer
 
-    call ternel_main
+    mov rax, ternel_main                 ; jump to the higher-half kernel
+    call rax
 
 .hang:
     cli
