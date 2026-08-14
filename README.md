@@ -65,10 +65,10 @@ boot/                  boot-time assembly
   boot.asm             Multiboot2 header, paging, long-mode switch, entry
   gdt.asm              boot-time GDT + segment reload helper
 src/                   kernel sources (flat modules)
-  ternel.c             entry point + console kprintf
+  ternel.c             entry point + console tprintf
   tstring.{c,h}        libc-string subset (t-prefixed)
   vga.{c,h}            VGA text-mode driver (incl. CP437 box-drawing glyphs)
-  serial.{c,h}         COM1 UART + klog()
+  serial.{c,h}         COM1 UART + tlog()
   teyboard.{c,h}       PS/2 keyboard
   gdt.{c,h}            GDT reload glue
   idt.{c,h}            IDT + PIC remap, IRQ dispatch

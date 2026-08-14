@@ -94,14 +94,14 @@ void vga_puts(const char *str)
 void vga_put_hex(uint32_t val)
 {
     char buf[16];
-    kitoa(val, buf, 16);
+    titoa(val, buf, 16);
     vga_puts(buf);
 }
 
 void vga_put_dec(uint32_t val)
 {
     char buf[16];
-    kitoa(val, buf, 10);
+    titoa(val, buf, 10);
     vga_puts(buf);
 }
 

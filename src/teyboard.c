@@ -71,7 +71,7 @@ static void key_buffer_push(char c)
     key_tail = next;
 }
 
-static void keyboard_callback(registers_t *r)
+static void teyboard_callback(registers_t *r)
 {
     uint8_t scancode;
     char c;
@@ -112,7 +112,7 @@ static void keyboard_callback(registers_t *r)
     key_buffer_push(c);
 }
 
-void keyboard_init(void)
+void teyboard_init(void)
 {
     /* flush any stale scancodes */
     while (inb(KEYBOARD_STATUS) & 0x01)
@@ -126,11 +126,11 @@ void keyboard_init(void)
         ;
     (void)inb(KEYBOARD_DATA);
 
-    irq_register(1, keyboard_callback);
+    irq_register(1, teyboard_callback);
 }
 
 /* Returns -1 if no key is pending, otherwise the next character. */
-int keyboard_getchar(void)
+int teyboard_getchar(void)
 {
     if (key_head == key_tail)
         return -1;

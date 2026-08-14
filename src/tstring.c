@@ -1,6 +1,6 @@
 #include "tstring.h"
 
-size_t kstrlen(const char *s)
+size_t tstrlen(const char *s)
 {
     size_t n = 0;
     while (s[n])
@@ -8,7 +8,7 @@ size_t kstrlen(const char *s)
     return n;
 }
 
-int kstrcmp(const char *a, const char *b)
+int tstrcmp(const char *a, const char *b)
 {
     while (*a && *a == *b) {
         a++;
@@ -17,7 +17,7 @@ int kstrcmp(const char *a, const char *b)
     return (int)(unsigned char)*a - (int)(unsigned char)*b;
 }
 
-int kstrncmp(const char *a, const char *b, size_t n)
+int tstrncmp(const char *a, const char *b, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
         int d = (int)(unsigned char)a[i] - (int)(unsigned char)b[i];
@@ -27,7 +27,7 @@ int kstrncmp(const char *a, const char *b, size_t n)
     return 0;
 }
 
-char *kstrcpy(char *dst, const char *src)
+char *tstrcpy(char *dst, const char *src)
 {
     char *d = dst;
     while ((*d++ = *src++))
@@ -35,7 +35,7 @@ char *kstrcpy(char *dst, const char *src)
     return dst;
 }
 
-char *kstrncpy(char *dst, const char *src, size_t n)
+char *tstrncpy(char *dst, const char *src, size_t n)
 {
     size_t i;
     for (i = 0; i < n && src[i]; i++)
@@ -45,15 +45,15 @@ char *kstrncpy(char *dst, const char *src, size_t n)
     return dst;
 }
 
-char *kstrcat(char *dst, const char *src)
+char *tstrcat(char *dst, const char *src)
 {
-    char *d = dst + kstrlen(dst);
+    char *d = dst + tstrlen(dst);
     while ((*d++ = *src++))
         ;
     return dst;
 }
 
-int kstartswith(const char *s, const char *prefix)
+int tstartswith(const char *s, const char *prefix)
 {
     while (*prefix) {
         if (*s != *prefix)
@@ -64,7 +64,7 @@ int kstartswith(const char *s, const char *prefix)
     return 1;
 }
 
-char *kstrchr(const char *s, int c)
+char *tstrchr(const char *s, int c)
 {
     while (*s) {
         if (*s == c)
@@ -74,7 +74,7 @@ char *kstrchr(const char *s, int c)
     return (c == '\0') ? (char *)s : NULL;
 }
 
-void *kmemset(void *s, int c, size_t n)
+void *tmemset(void *s, int c, size_t n)
 {
     unsigned char *p = (unsigned char *)s;
     for (size_t i = 0; i < n; i++)
@@ -82,7 +82,7 @@ void *kmemset(void *s, int c, size_t n)
     return s;
 }
 
-void *kmemcpy(void *dst, const void *src, size_t n)
+void *tmemcpy(void *dst, const void *src, size_t n)
 {
     unsigned char *d = (unsigned char *)dst;
     const unsigned char *s = (const unsigned char *)src;
@@ -91,7 +91,7 @@ void *kmemcpy(void *dst, const void *src, size_t n)
     return dst;
 }
 
-void *kmemmove(void *dst, const void *src, size_t n)
+void *tmemmove(void *dst, const void *src, size_t n)
 {
     unsigned char *d = (unsigned char *)dst;
     const unsigned char *s = (const unsigned char *)src;
@@ -105,7 +105,7 @@ void *kmemmove(void *dst, const void *src, size_t n)
     return dst;
 }
 
-int kmemcmp(const void *a, const void *b, size_t n)
+int tmemcmp(const void *a, const void *b, size_t n)
 {
     const unsigned char *x = (const unsigned char *)a;
     const unsigned char *y = (const unsigned char *)b;
@@ -117,7 +117,7 @@ int kmemcmp(const void *a, const void *b, size_t n)
     return 0;
 }
 
-void kitoa(uint32_t val, char *buf, int base)
+void titoa(uint32_t val, char *buf, int base)
 {
     static const char digits[] = "0123456789abcdef";
     char tmp[16];

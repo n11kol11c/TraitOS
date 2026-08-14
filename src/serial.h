@@ -12,7 +12,7 @@ int  serial_init(uint16_t port);
 void serial_putchar(uint16_t port, char c);
 void serial_puts(uint16_t port, const char *s);
 void serial_printf(const char *fmt, ...);
-void klog(const char *fmt, ...);
+void tlog(const char *fmt, ...);
 int  serial_ready(void);
 
 #endif

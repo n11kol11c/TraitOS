@@ -44,7 +44,7 @@ stack_top:
 section .text
 global _start
 extern gdt64_ptr
-extern kernel_main
+extern ternel_main
 
 _start:
     mov esp, stack_top
@@ -119,7 +119,7 @@ long_mode:
 
     mov rdi, rbx                         ; rdi = multiboot2 info pointer
 
-    call kernel_main
+    call ternel_main
 
 .hang:
     cli

@@ -1,7 +1,7 @@
-#ifndef KEYBOARD_H
-#define KEYBOARD_H
+#ifndef TEYBOARD_H
+#define TEYBOARD_H
 
-void keyboard_init(void);
-int  keyboard_getchar(void); /* -1 if no key pending */
+void teyboard_init(void);
+int  teyboard_getchar(void); /* -1 if no key pending */
 
 #endif

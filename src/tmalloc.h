@@ -1,9 +1,9 @@
-#ifndef KMALLOC_H
-#define KMALLOC_H
+#ifndef TMALLOC_H
+#define TMALLOC_H
 
 #include <stddef.h>
 
-void *kmalloc(size_t size);
-void  kfree(void *ptr);
+void *tmalloc(size_t size);
+void  tfree(void *ptr);
 
 #endif

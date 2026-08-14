@@ -9,8 +9,8 @@
 #include "timer.h"
 #include "tmalloc.h"
 
-/* Kernel console printf (KumOS-style, VGA only; use klog() for serial). */
-static void kprintf(const char *fmt, ...)
+/* Kernel console printf (KumOS-style, VGA only; use tlog() for serial). */
+static void tprintf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -56,7 +56,7 @@ static void kprintf(const char *fmt, ...)
     va_end(ap);
 }
 
-void kernel_main(void)
+void ternel_main(void)
 {
     char line[128];
     int line_len = 0;
@@ -69,21 +69,21 @@ void kernel_main(void)
     gdt_init();
     idt_init();
     timer_init(100);
-    keyboard_init();
+    teyboard_init();
 
-    klog("TraitOS v0.1.0 booted on x86_64\n");
-    klog("interrupts: IDT + PIC, PIT @100Hz, PS/2 keyboard\n");
+    tlog("TraitOS v0.1.0 booted on x86_64\n");
+    tlog("interrupts: IDT + PIC, PIT @100Hz, PS/2 keyboard\n");
 
-    kprintf("===============================================\n");
-    kprintf(" TraitOS v0.1.0 - RAM-resident, amnesic OS\n");
-    kprintf("===============================================\n\n");
+    tprintf("===============================================\n");
+    tprintf(" TraitOS v0.1.0 - RAM-resident, amnesic OS\n");
+    tprintf("===============================================\n\n");
 
-    kprintf(" arch      : x86_64\n");
-    kprintf(" boot      : GRUB2 / Multiboot2 (BIOS + UEFI)\n");
-    kprintf(" storage   : none - runs entirely from RAM\n\n");
+    tprintf(" arch      : x86_64\n");
+    tprintf(" boot      : GRUB2 / Multiboot2 (BIOS + UEFI)\n");
+    tprintf(" storage   : none - runs entirely from RAM\n\n");
 
-    kprintf(" Type something and press Enter. Uptime logs to serial.\n");
-    kprintf("   > ");
+    tprintf(" Type something and press Enter. Uptime logs to serial.\n");
+    tprintf("   > ");
 
     __asm__ volatile("sti");
 
@@ -93,15 +93,15 @@ void kernel_main(void)
         uint32_t now = timer_ticks();
         if (now / 100 != last_sec) {
             last_sec = now / 100;
-            klog("uptime: %us\n", last_sec);
+            tlog("uptime: %us\n", last_sec);
         }
 
         int c;
-        while ((c = keyboard_getchar()) >= 0) {
+        while ((c = teyboard_getchar()) >= 0) {
             if (c == '\n') {
                 vga_putchar('\n');
                 if (line_len > 0)
-                    klog("input: %s\n", line);
+                    tlog("input: %s\n", line);
                 line_len = 0;
                 line[0] = '\0';
                 vga_puts("   > ");

@@ -174,7 +174,7 @@ void isr_handler(registers_t *r)
         vga_puts(exception_names[r->int_no]);
         vga_puts("\n");
         vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
-        klog("PANIC: exception %u (%s) at rip=0x%lx\n",
+        tlog("PANIC: exception %u (%s) at rip=0x%lx\n",
              (uint32_t)r->int_no, exception_names[r->int_no],
              (unsigned long)r->rip);
         for (;;)

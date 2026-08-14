@@ -58,7 +58,7 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 ### M0 — Foundation (this commit)
 - [x] Project structure, Makefile, build.sh, toolchain, CI
 - [x] Multiboot2 header + 32→64-bit long-mode switch (identity map 1 GiB)
-- [x] VGA text driver, serial (COM1) logging, `kprintf`/`klog`
+- [x] VGA text driver, serial (COM1) logging, `tprintf`/`tlog`
 - [x] ISO build (`grub-mkrescue`) and USB writer (dd of hybrid ISO)
 - [ ] Boot to a clean TUI console (console banner, halting loop)
 
@@ -73,7 +73,7 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - Parse Multiboot2 memory map and framebuffer info
 - Bitmap **PMM** with page alloc/free and poisoning on free
 - Higher-half kernel mapping; `vmm` with user/kernel page tables
-- Heap (`kmalloc`) on top of `vmm`
+- Heap (`tmalloc`) on top of `vmm`
 
 ### M3 — TUI shell
 - Input line editor (history, arrows), command parser
@@ -134,7 +134,7 @@ nasm -f elf64
 
 - CI builds `traitos.bin` + `traitos.iso` on every push.
 - Local smoke test: `./build.sh run` (QEMU, not required for building).
-- Serial output (`-serial stdio`) for kernel logs via `klog`.
+- Serial output (`-serial stdio`) for kernel logs via `tlog`.
 - Later: in-kernel self-tests (`kunit`-style) for pmm/vmm/string.
 
 ## Notes / open items
