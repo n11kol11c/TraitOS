@@ -11,6 +11,7 @@
 #include "tmalloc.h"
 #include "tstring.h"
 #include "tpmm.h"
+#include "tvmm.h"
 
 /* Kernel console printf (KumOS-style, VGA only; use tlog() for serial). */
 static void tprintf(const char *fmt, ...)
@@ -67,6 +68,8 @@ static void cmd_uptime(int argc, char **argv);
 static void cmd_ver(int argc, char **argv);
 static void cmd_info(int argc, char **argv);
 static void cmd_alloc(int argc, char **argv);
+static void cmd_paging(int argc, char **argv);
+static void cmd_heap(int argc, char **argv);
 static void cmd_echo(int argc, char **argv);
 static void cmd_die(int argc, char **argv);
 
@@ -81,6 +84,8 @@ static const struct {
     { "ver",    cmd_ver,    "kernel version" },
     { "info",   cmd_info,   "system + memory info" },
     { "alloc",  cmd_alloc,  "allocate and free 8 physical pages" },
+    { "paging", cmd_paging, "map a page at high vaddr, poke it, unmap" },
+    { "heap",   cmd_heap,   "exercise the kernel heap (tmalloc/tfree)" },
     { "echo",   cmd_echo,   "print the rest of the line" },
     { "die",    cmd_die,    "divide by zero (panic demo)" },
 };
@@ -114,7 +119,7 @@ static void cmd_ver(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    tprintf(" TraitOS v0.2.0 (x86_64, Multiboot2)\n");
+    tprintf(" TraitOS v0.3.0 (x86_64, Multiboot2)\n");
 }
 
 static void cmd_info(int argc, char **argv)
@@ -130,6 +135,9 @@ static void cmd_info(int argc, char **argv)
             (uint32_t)(tpmm_available_mem() >> 10) % 1024);
     tprintf(" frames    : %u free / %u used\n",
             tpmm_free_frames(), tpmm_used_frames());
+    tprintf(" heap      : %u KiB mapped, %u KiB used, %u blocks\n",
+            (uint32_t)(tmalloc_total() >> 10),
+            (uint32_t)(tmalloc_used() >> 10), tmalloc_blocks());
 }
 
 static void cmd_alloc(int argc, char **argv)
@@ -149,6 +157,50 @@ static void cmd_alloc(int argc, char **argv)
         if (pages[i])
             tpmm_free(pages[i]);
     tprintf(" freed them again (%u frames free)\n", tpmm_free_frames());
+}
+
+static void cmd_paging(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    uintptr_t frame = tpmm_alloc();
+    if (!frame) {
+        tprintf(" out of memory\n");
+        return;
+    }
+    uintptr_t virt = 0xFFFF800000000000ULL;
+    tprintf(" frame @ 0x%x, mapping at 0xffff800000000000\n", (uint32_t)frame);
+    if (vmm_map_page(virt, frame, VMM_PAGE_WRITE) != 0) {
+        tprintf(" map failed\n");
+        tpmm_free(frame);
+        return;
+    }
+    volatile uint32_t *p = (volatile uint32_t *)virt;
+    *p = 0x54524149;
+    tprintf(" wrote 0x54524149, read back 0x%x\n", *p);
+    vmm_unmap_page(virt);
+    tpmm_free(frame);
+    tprintf(" unmapped and freed\n");
+}
+
+static void cmd_heap(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" heap: %u KiB mapped, %u KiB used, %u blocks\n",
+            (uint32_t)(tmalloc_total() >> 10),
+            (uint32_t)(tmalloc_used() >> 10), tmalloc_blocks());
+    void *a = tmalloc(64);
+    void *b = tmalloc(1024);
+    void *c = tmalloc(48);
+    tprintf(" tmalloc(64)=%p tmalloc(1024)=%p tmalloc(48)=%p\n", a, b, c);
+    tprintf(" used: %u KiB, %u blocks\n",
+            (uint32_t)(tmalloc_used() >> 10), tmalloc_blocks());
+    tfree(b);
+    tfree(a);
+    tfree(c);
+    tprintf(" after free: %u KiB used, %u blocks\n",
+            (uint32_t)(tmalloc_used() >> 10), tmalloc_blocks());
 }
 
 static void cmd_echo(int argc, char **argv)
@@ -220,13 +272,14 @@ void ternel_main(uintptr_t mbi)
     timer_init(100);
     teyboard_init();
     tpmm_init(mbi);
+    vmm_init();
 
-    tlog("TraitOS v0.2.0 booted on x86_64\n");
+    tlog("TraitOS v0.3.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
 
     tprintf("===============================================\n");
-    tprintf(" TraitOS v0.2.0 - RAM-resident, amnesic OS\n");
+    tprintf(" TraitOS v0.3.0 - RAM-resident, amnesic OS\n");
     tprintf("===============================================\n\n");
 
     tprintf(" Type 'help' for a list of commands.\n");

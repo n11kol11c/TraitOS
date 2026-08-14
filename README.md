@@ -6,8 +6,9 @@ and it is gone. Built with C and x86_64 assembly, boots via **GRUB2
 (Multiboot2)** on both **BIOS and UEFI**, and ships a **TUI** for now.
 
 > **Status:** interactive console with a command line (`help`, `clear`,
-> `uptime`, `info`, `alloc`, `die`...) and M2 underway: Multiboot2 memory map
-> parsing + bitmap physical-frame allocator.
+> `uptime`, `info`, `alloc`, `paging`, `heap`, `die`...) and M2 mostly done:
+> Multiboot2 memory map, bitmap PMM, `vmm` paging (map/unmap), and a real
+> kernel heap (`tmalloc`).
 > **Disclaimer:** educational project, *not* production security software.
 
 ## Goals

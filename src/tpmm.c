@@ -136,6 +136,43 @@ uintptr_t tpmm_alloc(void)
     return 0;
 }
 
+/* Allocate `pages` contiguous physical frames (for the heap). */
+uintptr_t tpmm_alloc_contig(size_t pages)
+{
+    uint32_t run = 0;
+    uint32_t start = 0;
+
+    for (uint32_t f = first_free_hint; f < total_frames; f++) {
+        if (!bit_test(f)) {
+            if (run == 0)
+                start = f;
+            if (++run == pages)
+                goto found;
+        } else {
+            run = 0;
+        }
+    }
+    for (uint32_t f = 0; f < first_free_hint; f++) {
+        if (!bit_test(f)) {
+            if (run == 0)
+                start = f;
+            if (++run == pages)
+                goto found;
+        } else {
+            run = 0;
+        }
+    }
+    return 0;
+
+found:
+    for (uint32_t i = 0; i < pages; i++) {
+        bit_set(start + i);
+        free_frames--;
+    }
+    first_free_hint = start + pages;
+    return (uintptr_t)start * PAGE_SIZE;
+}
+
 void tpmm_free(uintptr_t phys)
 {
     uint32_t frame = (uint32_t)(phys / PAGE_SIZE);
