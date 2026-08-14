@@ -1,0 +1,145 @@
+# TraitOS — Development Plan
+
+## Vision
+
+TraitOS is a privacy- and security-oriented operating system that **runs
+entirely from RAM**:
+
+- Boots from a USB stick (or ISO) using GRUB2.
+- Kernel, drivers, and root filesystem are loaded into RAM during boot.
+- After boot, the OS **never writes to the boot media**: no swap, no
+  persistent mounts, no writes. Unmount the stick and the machine holds no
+  storage at all.
+- Power off = complete wipe.
+
+The UI is a **terminal (TUI)** for now; a framebuffer console is a later
+milestone.
+
+## Locked design decisions
+
+| Decision          | Choice                                    | Why |
+| ----------------- | ----------------------------------------- | --- |
+| Architecture      | x86_64 only                               | scope, tooling |
+| Boot protocol     | GRUB2 via Multiboot2                      | BIOS + UEFI from one image |
+| Firmware          | BIOS **and** UEFI (one ISO)               | broadest reach |
+| Language          | C11 (clang, freestanding) + NASM asm      | auditable, no deps |
+| Kernel placement  | loaded at 1 MiB, identity-mapped          | simplest correct start |
+| Toolchain         | clang `--target=x86_64-none-elf`, ld.lld, nasm | no GCC cross build needed |
+
+The target later adds a higher-half mapping (`0xFFFFFFFF80000000`) for the
+kernel, keeping the 1 MiB identity map only for the boot handoff.
+
+## Structure heritage
+
+The project layout, build scripts, and module conventions mirror
+[KumOS](https://github.com/todorw/KumOS) (GPL-3.0): a flat `src/` of
+self-contained `.c/.h` modules, `boot/` assembly, top-level
+`linker.ld`/`grub.cfg`/`build.sh`, and a `user/` userspace directory.
+KumOS is 32-bit (Multiboot1); TraitOS is x86_64 (Multiboot2), so the boot
+chain is written from scratch. TraitOS source is original MIT code — the
+KumOS API shapes and conventions are adapted, not copied verbatim.
+
+## Directory map (current)
+
+```
+boot/                    boot assembly (boot.asm, gdt.asm)
+src/                     flat kernel modules
+  kernel.c, kstring.*, vga.*, serial.*
+  keyboard.*, gdt.*, idt.*, timer.*, kmalloc.*   (stubs → later milestones)
+user/                    userspace programs (planned)
+linker.ld                kernel link script (loads at 1 MiB)
+grub.cfg                 GRUB2 menu config
+Makefile                 build system (KumOS-style KERN_OBJS)
+build.sh                 deps/build/iso/run/usb/clean wrapper
+```
+
+## Milestones
+
+### M0 — Foundation (this commit)
+- [x] Project structure, Makefile, build.sh, toolchain, CI
+- [x] Multiboot2 header + 32→64-bit long-mode switch (identity map 1 GiB)
+- [x] VGA text driver, serial (COM1) logging, `kprintf`/`klog`
+- [x] ISO build (`grub-mkrescue`) and USB writer (dd of hybrid ISO)
+- [ ] Boot to a clean TUI console (console banner, halting loop)
+
+### M1 — Interrupts & input
+- [x] 64-bit IDT gates for all 32 exceptions + 16 IRQs (boot/isr_stubs.asm)
+- [x] 8259A PIC remap to vectors 32-47, EOI dispatch, `irq_register()`
+- [x] PIT timer at 100 Hz (`timer_ticks`, uptime logging)
+- [x] PS/2 keyboard driver (IRQ1): set-1 scancodes, shift/caps, ring buffer
+- [ ] PIC→APIC, TSS/IST (double-fault stack), exception page-fault details
+
+### M2 — Memory management
+- Parse Multiboot2 memory map and framebuffer info
+- Bitmap **PMM** with page alloc/free and poisoning on free
+- Higher-half kernel mapping; `vmm` with user/kernel page tables
+- Heap (`kmalloc`) on top of `vmm`
+
+### M3 — TUI shell
+- Input line editor (history, arrows), command parser
+- Commands: `help`, `about`, `meminfo`, `cpuinfo`, `clear`, `reboot`, `poweroff`
+- Framebuffer console with simple fonts (optional)
+
+### M4 — RAM filesystem
+- GRUB loads an `initrd`/rootfs image; unpack into **ramfs/tarfs**
+- VFS with ramfs, tmpfs, procfs, sysfs
+- Confirm: boot media never mounted writable
+
+### M5 — Security hardening
+- NX, SMEP/SMAP, W^X, kernel KASLR (GRUB `multiboot2` relocatable tag)
+- No swap, no dump, no hibernation
+- Minimal, auditable syscall surface; capability-style checks
+- `shutdown` performs RAM scrubbing (best effort)
+
+### M6 — Processes
+- Scheduler (round-robin + priority), preemption, IPC, user mode + syscalls
+- Memory isolation between processes (paging)
+- `user/` fills up with a shell and demo ELFs
+
+## Security model (honest scoping)
+
+TraitOS defends against **software** tampering and data persistence:
+
+- Nothing is written to the boot media after boot → no forensic trail on the
+  stick; all ephemeral state lives in RAM.
+- Defense in depth: NX, SMEP/SMAP, W^X, ASLR, minimal attack surface.
+
+TraitOS does **not** defend against:
+
+- **Cold-boot / RAM-dump attacks** (memory persists after power loss for a
+  while, especially with DRAM remanence).
+- **Evil-maid / hardware tampering** (no TPM chain of trust yet).
+- Firmware (UEFI/BIOS) compromise.
+
+These are documented here so the security claims stay honest.
+
+## Toolchain notes
+
+```make
+clang --target=x86_64-none-elf -mcmodel=kernel -mno-red-zone
+      -mgeneral-regs-only -mno-sse -mno-sse2 -fno-pic -ffreestanding
+ld.lld -m elf_x86_64 -T linker.ld
+nasm -f elf64
+```
+
+- `-mgeneral-regs-only` keeps compiler-generated code free of SSE/MMX so
+  interrupt handling can assume clean FPU state.
+- ISO: `grub-mkrescue` (needs xorriso + GRUB modules). USB: the ISO is a
+  hybrid image, so `dd`ing it to a USB stick boots in BIOS mode; UEFI USB
+  layout (ESP + `x86_64-efi` core) is a later milestone.
+- macOS uses `x86_64-elf-grub-mkrescue`; Linux uses `grub-mkrescue`; the
+  Makefile and build.sh probe both.
+
+## Testing
+
+- CI builds `traitos.bin` + `traitos.iso` on every push.
+- Local smoke test: `./build.sh run` (QEMU, not required for building).
+- Serial output (`-serial stdio`) for kernel logs via `klog`.
+- Later: in-kernel self-tests (`kunit`-style) for pmm/vmm/string.
+
+## Notes / open items
+
+- `lld` may be keg-only on macOS; `Makefile` probes PATH then
+  `/opt/homebrew/opt/lld/bin/ld.lld`.
+- `user/` mirrors KumOS's userspace dir; populated at M6.
+- `iso/` is generated and gitignored, matching KumOS's workflow.
