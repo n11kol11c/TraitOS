@@ -1,11 +1,17 @@
 #include "tmalloc.h"
 #include "tpmm.h"
+#include "tvmm.h"
 
 #include <stdint.h>
 
 #define ALIGN16(x)   (((x) + 15) & ~(uint64_t)15)
 #define MALLOC_MAGIC 0x54474C41u          /* 'TLGA' */
 #define HEADER_SIZE  16
+
+/* The heap lives in its own higher-half virtual region (PML4 slot 511,
+ * PDPT 511), right above the physmap window. Chunks are mapped there via
+ * the VMM, so the heap is not limited to the identity-mapped first 1 GiB. */
+#define HEAP_VIRT_BASE 0xFFFFFFFFC0000000ULL
 
 /* Block layout (16-byte header):
  *   size  : usable payload size          (offset 0)
@@ -19,6 +25,7 @@ struct block {
 static struct block *free_list = NULL;
 static uintptr_t bump = 0;
 static uintptr_t bump_end = 0;
+static uintptr_t heap_virt = HEAP_VIRT_BASE;
 static uint64_t total_bytes = 0;
 static uint64_t used_bytes = 0;
 static uint32_t block_count = 0;
@@ -30,8 +37,21 @@ static void grow_heap(uint64_t need)
     uintptr_t base = tpmm_alloc_contig(pages);
     if (!base)
         return;
-    bump = base + HEADER_SIZE;
-    bump_end = base + (uintptr_t)pages * 4096;
+
+    for (size_t i = 0; i < pages; i++) {
+        if (vmm_map_page(heap_virt + i * 4096, base + i * 4096,
+                         VMM_PAGE_WRITE) != 0) {
+            for (size_t j = 0; j < i; j++)
+                vmm_unmap_page(heap_virt + j * 4096);
+            for (size_t j = 0; j < pages; j++)
+                tpmm_free(base + j * 4096);
+            return;
+        }
+    }
+
+    bump = heap_virt + HEADER_SIZE;
+    bump_end = heap_virt + (uintptr_t)pages * 4096;
+    heap_virt = bump_end;
     total_bytes += (uint64_t)pages * 4096;
 }
 

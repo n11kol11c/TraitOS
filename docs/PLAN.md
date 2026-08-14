@@ -74,7 +74,8 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [x] Bitmap **PMM** with page alloc/free (`src/tpmm.c`), first-fit scan
 - [x] `vmm` paging: map/unmap 4 KiB pages, tables resolved via the
       higher-half physmap window (`src/tvmm.c`)
-- [x] Heap (`tmalloc`) on top of PMM: first-fit free list + bump grow (`src/tmalloc.c`)
+- [x] Heap (`tmalloc`) on top of PMM: first-fit free list + bump grow, living
+      in a dedicated higher-half virtual region mapped through the VMM (`src/tmalloc.c`)
 - [x] Higher-half kernel: linked at `0xFFFFFFFF80000000`, loaded low by GRUB,
       boot.asm maps 1 GiB (identity + higher half) before entering `ternel_main`
 - [x] Per-process address spaces (`vmm_aspace_*`): independent PML4 trees that
