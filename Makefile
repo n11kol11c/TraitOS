@@ -27,11 +27,12 @@ LDFLAGS  = -m elf_x86_64 -T linker.ld -z noexecstack
 GRUB_MKR = $(shell command -v x86_64-elf-grub-mkrescue 2>/dev/null || command -v grub-mkrescue 2>/dev/null || command -v grub2-mkrescue 2>/dev/null)
 
 KERN_OBJS = \
-    boot/boot.o boot/gdt.o boot/isr_stubs.o \
+    boot/boot.o boot/gdt.o boot/isr_stubs.o boot/task_switch.o \
     src/tstring.o src/vga.o src/serial.o \
     src/teyboard.o src/gdt.o src/idt.o src/timer.o src/tmalloc.o src/tpmm.o src/tvmm.o \
     src/tsec.o \
     src/tfs.o src/ttarfs.o src/tprocfs.o src/tsysfs.o src/tsh.o \
+    src/ttask.o \
     src/ternel.o
 
 USER_PROGS =
