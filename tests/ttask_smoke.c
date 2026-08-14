@@ -3,8 +3,10 @@
  * selects the next task to run. */
 #include <stdio.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #include "ttask_core.h"
+#include "ttask.h"
 
 static int checks = 0;
 static int failures = 0;
@@ -87,6 +89,10 @@ int main(void)
     printf("  -- single-slot table --\n");
     st[0] = TTASK_READY;
     check(ttask_pick_index(0, st, pr, 1) == 0, "count=1 self pick");
+
+    printf("  -- context field layout (task_switch.asm dependency) --\n");
+    check(offsetof(ttask_t, context) == 0, "context stays the first member");
+    check(sizeof(((ttask_t *)0)->context) == 8, "context is 64-bit");
 
     if (failures) {
         printf("TTASK SMOKE TEST FAILED (%d/%d failures)\n", failures, checks);

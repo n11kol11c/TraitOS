@@ -1,6 +1,7 @@
 #include "idt.h"
 
 #include "serial.h"
+#include "ttask.h"
 #include "vga.h"
 
 #include <stdint.h>
@@ -175,6 +176,21 @@ void irq_register(int irq, irq_handler_t handler)
 void isr_handler(registers_t *r)
 {
     if (r->int_no < 32) {
+        /* A fault in a ring-3 program kills the offending task (the
+         * scheduler switches away and never returns here); a fault in
+         * kernel code is a bug and halts. */
+        if ((r->cs & 3) == 3) {
+            tlog("user task %u killed: %s at rip=0x%lx\n",
+                 (uint32_t)ttask_self(), exception_names[r->int_no],
+                 (unsigned long)r->rip);
+            vga_set_color(VGA_RED, VGA_BLACK);
+            vga_puts("\nUSER FAULT: ");
+            vga_puts(exception_names[r->int_no]);
+            vga_puts(" killed the task\n");
+            vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+            ttask_exit();          /* noreturn */
+        }
+
         vga_set_color(VGA_RED, VGA_BLACK);
         vga_puts("\nKERNEL PANIC: ");
         vga_puts(exception_names[r->int_no]);
