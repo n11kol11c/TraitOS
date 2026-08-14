@@ -13,6 +13,7 @@
 #include "tpmm.h"
 #include "tvmm.h"
 #include "tfs.h"
+#include "tsh.h"
 
 /* Kernel console printf (KumOS-style, VGA only; use tlog() for serial). */
 static void tprintf(const char *fmt, ...)
@@ -116,6 +117,36 @@ static void cmd_hist(int argc, char **argv)
         tprintf(" (empty)\n");
 }
 
+/* ---- environment ------------------------------------------------------ */
+
+static void print_env(const char *key, const char *val)
+{
+    tprintf(" %s=%s\n", key, val);
+}
+
+static void cmd_env(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tsh_env_list(print_env);
+}
+
+static void cmd_set(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: set KEY=VALUE\n");
+        return;
+    }
+    char *eq = tstrchr(argv[1], '=');
+    if (!eq) {
+        tprintf(" set: expected KEY=VALUE\n");
+        return;
+    }
+    *eq = '\0';
+    if (tsh_env_set(argv[1], eq + 1) != 0)
+        tprintf(" set: environment table full\n");
+}
+
 /* ---- command interpreter --------------------------------------------- */
 
 static void cmd_help(int argc, char **argv);
@@ -130,6 +161,8 @@ static void cmd_echo(int argc, char **argv);
 static void cmd_die(int argc, char **argv);
 static void cmd_aspace(int argc, char **argv);
 static void cmd_hist(int argc, char **argv);
+static void cmd_env(int argc, char **argv);
+static void cmd_set(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
 static void cmd_cat(int argc, char **argv);
 static void cmd_mkdir(int argc, char **argv);
@@ -155,6 +188,8 @@ static const struct {
     { "die",    cmd_die,    "divide by zero (panic demo)" },
     { "aspace", cmd_aspace, "demo per-process address spaces (page tables)" },
     { "hist",   cmd_hist,   "show command history (up/down arrows recall)" },
+    { "env",    cmd_env,    "show environment variables" },
+    { "set",    cmd_set,    "set an environment variable (KEY=VALUE)" },
     { "ls",     cmd_ls,     "list a directory (default /)" },
     { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
     { "mkdir",  cmd_mkdir,  "create a directory" },
@@ -165,6 +200,21 @@ static const struct {
 };
 
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
+
+static void run_command(char *line)
+{
+    char *argv[TSH_ARGV_MAX];
+    int argc = tsh_tokenize(line, argv, TSH_ARGV_MAX);
+    if (argc == 0)
+        return;
+    for (size_t i = 0; i < NCOMMANDS; i++) {
+        if (tstrcmp(argv[0], commands[i].name) == 0) {
+            commands[i].fn(argc, argv);
+            return;
+        }
+    }
+    tprintf(" unknown command '%s' (try 'help')\n", argv[0]);
+}
 
 static void cmd_help(int argc, char **argv)
 {
@@ -473,38 +523,7 @@ static void cmd_mount(int argc, char **argv)
     tfs_mount_list(print_mount);
 }
 
-static int tokenize(char *line, char **argv, int max)
-{
-    int argc = 0;
-    char *p = line;
-    while (*p && argc < max) {
-        while (*p == ' ')
-            p++;
-        if (!*p)
-            break;
-        argv[argc++] = p;
-        while (*p && *p != ' ')
-            p++;
-        if (*p)
-            *p++ = '\0';
-    }
-    return argc;
-}
-
-static void run_command(char *line)
-{
-    char *argv[8];
-    int argc = tokenize(line, argv, 8);
-    if (argc == 0)
-        return;
-    for (size_t i = 0; i < NCOMMANDS; i++) {
-        if (tstrcmp(argv[0], commands[i].name) == 0) {
-            commands[i].fn(argc, argv);
-            return;
-        }
-    }
-    tprintf(" unknown command '%s' (try 'help')\n", argv[0]);
-}
+/* ---- command interpreter --------------------------------------------- */
 
 /* ---- entry point ------------------------------------------------------- */
 
@@ -528,6 +547,7 @@ void ternel_main(uintptr_t mbi)
     tfs_procfs_init();
     tfs_sysfs_init();
     tfs_load_initrd(mbi);
+    tsh_env_seed();
 
     tlog("TraitOS v0.6.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",

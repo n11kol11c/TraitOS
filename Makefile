@@ -30,7 +30,7 @@ KERN_OBJS = \
     boot/boot.o boot/gdt.o boot/isr_stubs.o \
     src/tstring.o src/vga.o src/serial.o \
     src/teyboard.o src/gdt.o src/idt.o src/timer.o src/tmalloc.o src/tpmm.o src/tvmm.o \
-    src/tfs.o src/ttarfs.o src/tprocfs.o src/tsysfs.o \
+    src/tfs.o src/ttarfs.o src/tprocfs.o src/tsysfs.o src/tsh.o \
     src/ternel.o
 
 USER_PROGS =
@@ -72,8 +72,11 @@ smoke: $(RAMFS_IMG)
 	@mkdir -p build
 	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/fs_smoke.c \
 	    src/tfs.c src/ttarfs.c src/tstring.c src/tprocfs.c src/tsysfs.c \
-	    -o build/smoke
-	./build/smoke
+	    -o build/fs_smoke
+	./build/fs_smoke
+	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/shell_smoke.c \
+	    src/tsh.c src/tstring.c -o build/shell_smoke
+	./build/shell_smoke
 
 clean:
 	@rm -rf build

@@ -61,7 +61,9 @@ RAM filesystem — all surfaced through an interactive TUI shell.
   PIT, PS/2 keyboard with shift/caps and a ring buffer.
 - **Interactive shell** — `help`, `info`, `alloc`, `paging`, `heap`, `aspace`,
   filesystem commands (`ls`, `cat`, `mkdir`, `touch`, `rm`, `write`, `mount`),
-  and a `die` command that deliberately page-faults to show the exception path.
+  history with up/down-arrow recall, `"quoted"` arguments, `$VAR` expansion
+  (`set`/`env`), and a `die` command that deliberately page-faults to show the
+  exception path.
 - **CI on every push** — GitHub Actions builds `traitos.bin` + `traitos.iso`.
 
 ---
@@ -91,6 +93,9 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    echo      print the rest of the line
    die       divide by zero (panic demo)
    aspace    demo per-process address spaces (page tables)
+   hist      show command history (up/down arrows recall)
+   env       show environment variables
+   set       set an environment variable (KEY=VALUE)
    ls        list a directory (default /)
    cat       print a file (ramfs, procfs, sysfs)
    mkdir     create a directory
@@ -364,6 +369,9 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `paging`   | map a frame at a high virtual address, poke it, unmap   |
 | `heap`     | exercise `tmalloc`/`tfree`                              |
 | `aspace`   | create 2 address spaces, show same-VA isolation, teardown |
+| `hist`     | show command history (up/down arrows recall lines)        |
+| `env`      | show environment variables                                |
+| `set`      | set an environment variable (`KEY=VALUE`)                 |
 | `ls`       | list a directory (default `/`)                            |
 | `cat`      | print a file (ramfs, procfs, sysfs)                       |
 | `mkdir`    | create a directory (parents are created on demand)        |

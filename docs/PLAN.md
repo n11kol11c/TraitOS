@@ -86,7 +86,10 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 ### M3 — TUI shell
 - [x] Kernel command line: `help`, `clear`, `uptime`, `ver`, `info`, `alloc`,
       `echo`, `die` (panic demo) — line editing + backspace in `src/ternel.c`
-- [ ] History, argv expansion, environment variables
+- [x] Command history with up/down-arrow recall (`src/ternel.c`, `hist` cmd),
+      `"quoted"` arguments, `\` escapes, `$VAR` expansion and `set`/`env`
+      (`src/tsh.c`, host-tested by `make smoke`)
+- [ ] History persistence across sessions, argv globbing, pipelines
 - [ ] Framebuffer console with simple fonts (optional)
 
 ### M4 — RAM filesystem
