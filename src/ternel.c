@@ -64,11 +64,6 @@ static void tprintf(const char *fmt, ...)
 
 /* ---- line editor with history ---------------------------------------- */
 
-#define HIST_MAX  32
-#define HIST_LEN  128
-
-static char history[HIST_MAX][HIST_LEN];
-static int  hist_count = 0;
 static int  hist_pos = 0;
 static int  prompt_row = 0;
 
@@ -93,28 +88,16 @@ static void redraw_line(const char *line, int len)
     vga_puts(line);
 }
 
-static void history_push(const char *line)
-{
-    if (hist_count > 0 && tstrcmp(history[hist_count - 1], line) == 0)
-        return;                        /* don't repeat consecutive entries */
-    if (hist_count < HIST_MAX) {
-        tstrncpy(history[hist_count], line, HIST_LEN);
-        hist_count++;
-    } else {
-        tmemmove(history[0], history[1], (HIST_MAX - 1) * HIST_LEN);
-        tstrncpy(history[HIST_MAX - 1], line, HIST_LEN);
-    }
-    hist_pos = hist_count;
-}
-
 static void cmd_hist(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    for (int i = 0; i < hist_count; i++)
-        tprintf(" %2d  %s\n", i, history[i]);
-    if (hist_count == 0)
+    if (tsh_hist_count() == 0) {
         tprintf(" (empty)\n");
+        return;
+    }
+    for (int i = 0; i < tsh_hist_count(); i++)
+        tprintf(" %2d  %s\n", i, tsh_hist_get(i));
 }
 
 /* ---- environment ------------------------------------------------------ */
@@ -576,7 +559,8 @@ void ternel_main(uintptr_t mbi)
             if (c == '\n') {
                 vga_putchar('\n');
                 if (line_len > 0) {
-                    history_push(line);
+                    tsh_hist_push(line);
+                    hist_pos = tsh_hist_count();
                     tlog("cmd: %s\n", line);
                     run_command(line);
                 }
@@ -592,18 +576,18 @@ void ternel_main(uintptr_t mbi)
             } else if (c == KEY_UP) {
                 if (hist_pos > 0) {
                     hist_pos--;
-                    tstrncpy(line, history[hist_pos], 128);
+                    tstrncpy(line, tsh_hist_get(hist_pos), 128);
                     line_len = (int)tstrlen(line);
                     redraw_line(line, line_len);
                 }
             } else if (c == KEY_DOWN) {
-                if (hist_pos < hist_count) {
+                if (hist_pos < tsh_hist_count()) {
                     hist_pos++;
-                    if (hist_pos >= hist_count) {
+                    if (hist_pos >= tsh_hist_count()) {
                         line[0] = '\0';
                         line_len = 0;
                     } else {
-                        tstrncpy(line, history[hist_pos], 128);
+                        tstrncpy(line, tsh_hist_get(hist_pos), 128);
                         line_len = (int)tstrlen(line);
                     }
                     redraw_line(line, line_len);

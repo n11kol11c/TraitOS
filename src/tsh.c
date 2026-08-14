@@ -47,6 +47,44 @@ void tsh_env_list(void (*cb)(const char *key, const char *val))
         cb(env_keys[i], env_vals[i]);
 }
 
+/* ---- command history ---------------------------------------------------- */
+
+static char hist_entries[TSH_HIST_MAX][TSH_HIST_LEN];
+static int  hist_count = 0;
+
+int tsh_hist_push(const char *line)
+{
+    if (hist_count > 0 &&
+        tstrcmp(hist_entries[hist_count - 1], line) == 0)
+        return 0;                      /* drop consecutive duplicates */
+    if (hist_count < TSH_HIST_MAX) {
+        tstrncpy(hist_entries[hist_count], line, TSH_HIST_LEN);
+        hist_count++;
+    } else {
+        tmemmove(hist_entries[0], hist_entries[1],
+                 (TSH_HIST_MAX - 1) * TSH_HIST_LEN);
+        tstrncpy(hist_entries[TSH_HIST_MAX - 1], line, TSH_HIST_LEN);
+    }
+    return 1;
+}
+
+int tsh_hist_count(void)
+{
+    return hist_count;
+}
+
+const char *tsh_hist_get(int i)
+{
+    if (i < 0 || i >= hist_count)
+        return NULL;
+    return hist_entries[i];
+}
+
+void tsh_hist_clear(void)
+{
+    hist_count = 0;
+}
+
 /* ---- tokenizer ---------------------------------------------------------- */
 
 static char arg_buf[TSH_ARGV_MAX][TSH_ARG_MAX];

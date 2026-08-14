@@ -88,6 +88,19 @@ int main(void)
     argc = tsh_tokenize(line, argv, TSH_ARGV_MAX);
     check("blank", argc == 0 ? "0" : "?", "0");
 
+    tsh_hist_clear();
+    check("hist empty", tsh_hist_count() == 0 ? "0" : "?", "0");
+    check("hist push", tsh_hist_push("ls /") == 1 ? "1" : "?", "1");
+    check("hist push2", tsh_hist_push("cat /etc/hostname") == 1 ? "1" : "?", "1");
+    check("hist dedupe", tsh_hist_push("cat /etc/hostname") == 0 ? "0" : "?", "0");
+    check("hist push3", tsh_hist_push("env") == 1 ? "1" : "?", "1");
+    check("hist count", tsh_hist_count() == 3 ? "3" : "?", "3");
+    check("hist[0]", tsh_hist_get(0), "ls /");
+    check("hist[1]", tsh_hist_get(1), "cat /etc/hostname");
+    check("hist[2]", tsh_hist_get(2), "env");
+    check("hist oob", tsh_hist_get(3) == NULL ? "null" : "set", "null");
+    check("hist oob neg", tsh_hist_get(-1) == NULL ? "null" : "set", "null");
+
     tsh_env_set("NAME", "traitos");
     check("env_get", tsh_env_get("NAME") ? tsh_env_get("NAME") : "(null)",
           "traitos");
