@@ -50,8 +50,11 @@ int vmm_aspace_phys(vmm_aspace_t *as, uintptr_t virt, uintptr_t *phys);
  * ring-3 pointers before any stac/clac copy. */
 int vmm_range_user(uintptr_t addr, size_t len, int write);
 
-/* Map/unmap in the currently active address space. */
+/* Kernel-half mappings (shared PML4 slots 0, 256..511): used by the heap,
+ * the initrd scratch area, and the per-task kernel stacks. Visible under
+ * every address space's CR3. */
 int  vmm_map_page(uintptr_t virt, uintptr_t phys, uint64_t flags);
 void vmm_unmap_page(uintptr_t virt);
+int  vmm_kernel_phys(uintptr_t virt, uintptr_t *phys);
 
 #endif

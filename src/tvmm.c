@@ -267,10 +267,76 @@ int vmm_aspace_phys(vmm_aspace_t *as, uintptr_t virt, uintptr_t *phys)
 
 int vmm_map_page(uintptr_t virt, uintptr_t phys, uint64_t flags)
 {
-    return vmm_aspace_map(current, virt, phys, flags);
+    /* Kernel-half mapping: slot 0 (identity) or 256..511 (higher half).
+     * These are the *shared* tables every address space clones, so the
+     * mapping is visible under any CR3. User slots go through
+     * vmm_aspace_map instead. */
+    unsigned idx = PML4_INDEX(virt);
+    if (idx > 0 && idx < KERNEL_PML4_START)
+        return -1;
+
+    uint64_t *pdpt = table_ensure(current->pml4, idx, flags);
+    if (!pdpt)
+        return -1;
+    uint64_t *pd = table_ensure(pdpt, PDPT_INDEX(virt), flags);
+    if (!pd)
+        return -1;
+    uint64_t *pt = table_ensure(pd, PD_INDEX(virt), flags);
+    if (!pt)
+        return -1;
+
+    pt[PT_INDEX(virt)] = ((uint64_t)phys & ADDR_MASK) | flags | VMM_PAGE_PRESENT;
+    tlb_flush_page(virt);
+    return 0;
 }
 
 void vmm_unmap_page(uintptr_t virt)
 {
-    vmm_aspace_unmap(current, virt);
+    unsigned idx = PML4_INDEX(virt);
+    if (idx > 0 && idx < KERNEL_PML4_START)
+        return;
+
+    uint64_t *pdpt = table_lookup(current->pml4, idx);
+    if (!pdpt)
+        return;
+    uint64_t *pd = table_lookup(pdpt, PDPT_INDEX(virt));
+    if (!pd)
+        return;
+    uint64_t *pt = table_lookup(pd, PD_INDEX(virt));
+    if (!pt)
+        return;
+
+    pt[PT_INDEX(virt)] = 0;
+    tlb_flush_page(virt);
+}
+
+/* Return 1 and the mapped physical frame if `virt` is present in the shared
+ * kernel view; 0 otherwise. */
+int vmm_kernel_phys(uintptr_t virt, uintptr_t *phys)
+{
+    unsigned idx = PML4_INDEX(virt);
+    if (idx > 0 && idx < KERNEL_PML4_START)
+        return 0;
+
+    uint64_t *pdpt = table_lookup(current->pml4, idx);
+    if (!pdpt)
+        return 0;
+    uint64_t *pd = table_lookup(pdpt, PDPT_INDEX(virt));
+    if (!pd)
+        return 0;
+    uint64_t e = pd[PD_INDEX(virt)];
+    if (e & (1ull << 7)) {          /* 2 MiB huge page */
+        if (phys)
+            *phys = e & ADDR_MASK;
+        return 1;
+    }
+    uint64_t *pt = table_lookup(pd, PD_INDEX(virt));
+    if (!pt)
+        return 0;
+    uint64_t pte = pt[PT_INDEX(virt)];
+    if (!(pte & VMM_PAGE_PRESENT))
+        return 0;
+    if (phys)
+        *phys = pte & ADDR_MASK;
+    return 1;
 }
