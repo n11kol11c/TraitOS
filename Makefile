@@ -81,6 +81,9 @@ smoke: $(RAMFS_IMG)
 	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/tsec_smoke.c \
 	    -o build/tsec_smoke
 	./build/tsec_smoke
+	$(HOST_CC) -std=gnu11 -O1 -Wall -Isrc tests/ttask_smoke.c \
+	    -o build/ttask_smoke
+	./build/ttask_smoke
 
 clean:
 	@rm -rf build
