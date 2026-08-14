@@ -42,13 +42,15 @@ KumOS API shapes and conventions are adapted, not copied verbatim.
 ## Directory map (current)
 
 ```
-boot/                    boot assembly (boot.asm, gdt.asm)
+boot/                    boot assembly (boot.asm, gdt.asm), ramfs.img initrd
 src/                     flat kernel modules
   ternel.c, tstring.*, vga.*, serial.*
-  teyboard.*, gdt.*, idt.*, timer.*, tmalloc.*   (some stubs → later milestones)
+  teyboard.*, gdt.*, idt.*, timer.*, tmalloc.*, tpmm.*, tvmm.*
+  tfs.*, ttarfs.*, tprocfs.*, tsysfs.*    (RAM filesystem + proc/sys)
+initrd/                  root filesystem staging (tar'd into boot/ramfs.img)
 user/                    userspace programs (planned)
-linker.ld                kernel link script (loads at 1 MiB)
-grub.cfg                 GRUB2 menu config
+linker.ld                kernel link script (loads at 1 MiB, higher-half VMA)
+grub.cfg                 GRUB2 menu config (multiboot2 + module2 initrd)
 Makefile                 build system (KumOS-style KERN_OBJS)
 build.sh                 deps/build/iso/run/usb/clean wrapper
 ```
@@ -88,9 +90,17 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [ ] Framebuffer console with simple fonts (optional)
 
 ### M4 — RAM filesystem
-- GRUB loads an `initrd`/rootfs image; unpack into **ramfs/tarfs**
-- VFS with ramfs, tmpfs, procfs, sysfs
-- Confirm: boot media never mounted writable
+- [x] GRUB loads an initrd as a Multiboot2 module (`module2 /boot/ramfs.img`)
+- [x] ramfs VFS core: node tree, `mkdir -p`, `touch`, `write`, recursive `rm`
+      (`src/tfs.c`), virtual nodes with generators for procfs/sysfs
+- [x] ustar tar unpacker + initrd loader that maps the module's pages into a
+      scratch window, unpacks, and unmaps (`src/ttarfs.c`)
+- [x] procfs (`/proc/uptime`, `/version`, `/meminfo`, `/heapinfo`) and sysfs
+      (`/sys/memory`, `/frames`, `/kernel`)
+- [x] shell commands: `ls`, `cat`, `mkdir`, `touch`, `rm`, `write`, `mount`
+- [x] `make` builds `boot/ramfs.img` from `initrd/` (ustar); host-side smoke
+      test unpacks the real image and walks/verifies the tree
+- [ ] Confirm: boot media never mounted writable
 
 ### M5 — Security hardening
 - NX, SMEP/SMAP, W^X, kernel KASLR (GRUB `multiboot2` relocatable tag)

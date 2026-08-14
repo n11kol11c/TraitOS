@@ -34,11 +34,12 @@ the boot media, ever.**
 
 It boots through **GRUB2 / Multiboot2** on both **BIOS and UEFI**, switches to
 long mode from assembly, and hands control to a higher-half C kernel with its
-own physical memory manager, paging, per-process address spaces, and a heap —
-all surfaced through an interactive TUI shell.
+own physical memory manager, paging, per-process address spaces, a heap, and a
+RAM filesystem — all surfaced through an interactive TUI shell.
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
-> and M2 (memory management) are complete. See [Roadmap](#roadmap).
+> M2 (memory management), and M4 (RAM filesystem) are complete. See
+> [Roadmap](#roadmap).
 
 ---
 
@@ -53,9 +54,13 @@ all surfaced through an interactive TUI shell.
   the kernel view; CR3 switching with TLB invalidation (`vmm_aspace_*`).
 - **Real heap** — first-fit free list + bump allocation on top of the PMM
   (`tmalloc`), with magic-block corruption checks.
+- **RAM filesystem** — GRUB loads an initrd as a Multiboot2 module; a ustar
+  unpacker builds a ramfs VFS on boot (`tfs`), with `procfs` and `sysfs`
+  virtual trees layered on top.
 - **Interrupts & input** — IDT for 32 exceptions + 16 IRQs, PIC remap, 100 Hz
   PIT, PS/2 keyboard with shift/caps and a ring buffer.
 - **Interactive shell** — `help`, `info`, `alloc`, `paging`, `heap`, `aspace`,
+  filesystem commands (`ls`, `cat`, `mkdir`, `touch`, `rm`, `write`, `mount`),
   and a `die` command that deliberately page-faults to show the exception path.
 - **CI on every push** — GitHub Actions builds `traitos.bin` + `traitos.iso`.
 
@@ -69,7 +74,7 @@ Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
 GRUB 2.06 ── "TraitOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.5.0 - RAM-resident, amnesic OS
+ TraitOS v0.6.0 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.
@@ -86,6 +91,13 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    echo      print the rest of the line
    die       divide by zero (panic demo)
    aspace    demo per-process address spaces (page tables)
+   ls        list a directory (default /)
+   cat       print a file (ramfs, procfs, sysfs)
+   mkdir     create a directory
+   touch     create an empty file
+   rm        remove a file or directory
+   write     write text into a file
+   mount     list mounted filesystems
 
    > info
  arch      : x86_64
@@ -94,6 +106,30 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
  memory    : 255 MiB total, 250 MiB available
  frames    : 63706 free / 1402 used
  heap      : 64 KiB mapped, 0 KiB used, 0 blocks
+
+   > ls /
+ drw- 0  README.txt
+ drw- 0  var/
+ drw- 0  etc/
+ drw- 0  usr/
+ drw- 0  sys/
+ drw- 0  proc/
+
+   > cat /etc/hostname
+ hostname=traitos
+
+   > cat /proc/uptime
+ uptime: 3 seconds (334 ticks)
+
+   > mkdir /tmp
+   > write /tmp/hello.txt hello from ram
+ ok (15 bytes)
+   > cat /tmp/hello.txt
+ hello from ram
+
+   > mount
+  procfs  ->  proc
+  sysfs   ->  sys
 
    > aspace
  2 address spaces, same virtual page mapped in both
@@ -126,7 +162,8 @@ stub beyond what GRUB2 already provides.
  ┌──────────────────────────────────────────────────────────────────┐
  │ GRUB2 reads the Multiboot2 header (first 8 KiB of traitos.bin),  │
  │ loads every PT_LOAD segment at its physical address,             │
- │ zero-fills BSS, and jumps to the ELF entry point.                │
+ │ zero-fills BSS, loads the initrd as a module, and jumps to the   │
+ │ ELF entry point.                                                 │
  └──────────────────────────────────────────────────────────────────┘
       │  e_entry = _start @ 0x100030  (32-bit protected mode, paging OFF)
       ▼
@@ -144,7 +181,8 @@ stub beyond what GRUB2 already provides.
       ▼
  src/ternel.c  ternel_main(mbi)
    • VGA → serial → GDT → IDT/PIC → PIT → keyboard → PMM → VMM → heap
-   • prints the banner and enters the shell loop
+   • mounts procfs/sysfs, unpacks the initrd module into ramfs, and
+     enters the shell loop
 ```
 
 ### Memory model
@@ -156,7 +194,7 @@ physical page of low memory into the higher half.
 ```
   VIRTUAL ADDRESS (per address space)              PHYSICAL
  ─────────────────────────────────────────      ─────────────────────
-  0xFFFFFFFFC0000000   end of physmap window       first 1 GiB of RAM,
+  0xFFFFFFFFC0000000   heap base (grows up)
   0xFFFFFFFF8010F000   kernel .data/.bss      ──►  loaded by GRUB at
   0xFFFFFFFF8010E000   kernel .rodata                physical 1 MiB
   0xFFFFFFFF8010A000   kernel .text
@@ -187,6 +225,10 @@ Key rules:
 | `boot/gdt.asm`               | Boot-time GDT (low) + `gdt_reload` (higher half)             |
 | `boot/isr_stubs.asm`         | 48 assembly interrupt entry stubs                            |
 | `src/ternel.c`               | Entry point, console printf, command interpreter             |
+| `src/tfs.{c,h}`              | Ramfs VFS: node tree, `mkdir -p`, `write`, rm, virtual nodes |
+| `src/ttarfs.c`               | ustar unpacker + Multiboot2 initrd module loader             |
+| `src/tprocfs.{c,h}`          | `/proc`: uptime, version, meminfo, heapinfo                  |
+| `src/tsysfs.{c,h}`           | `/sys`: memory, frames, kernel                               |
 | `src/tvmm.{c,h}`             | Paging + per-process address spaces (`vmm_aspace_*`)         |
 | `src/tpmm.{c,h}`             | Bitmap physical memory manager, first-fit + `_low`           |
 | `src/tmalloc.{c,h}`          | Kernel heap: first-fit free list + bump growth               |
@@ -196,7 +238,8 @@ Key rules:
 | `src/vga.{c,h}`              | VGA text-mode driver (CP437 glyphs)                          |
 | `src/serial.{c,h}`           | COM1 UART + `tlog()` for serial logs                         |
 | `src/gdt.{c,h}`              | GDT reload glue                                              |
-| `src/tstring.{c,h}`          | Dependency-free libc subset (`tstr*`/`tmem*`/`titoa`)        |
+| `src/tstring.{c,h}`          | Dependency-free libc subset (`tstr*`/`tmem*`/`titoa`/`tsprintf`) |
+| `initrd/`                    | Root filesystem staging; `make` tars it into `boot/ramfs.img` |
 | `linker.ld`                  | Higher-half link script (VMA/LMA split for GRUB)             |
 | `grub.cfg`                   | GRUB2 menu entry                                             |
 | `Makefile` / `build.sh`      | Build system + dependency/ISO/USB wrapper                    |
@@ -241,8 +284,11 @@ That is it. Thirty seconds later you are in the TraitOS shell.
 
 ```sh
 make                 # just the kernel → traitos.bin
-make iso             # + bootable ISO → traitos.iso
+make iso             # + initrd + bootable ISO → traitos.iso
 ```
+
+`make iso` also builds the initrd (`boot/ramfs.img`) from `initrd/` via a
+ustar archive and tells GRUB to load it with a `module2` line in `grub.cfg`.
 
 ### Run in an emulator
 
@@ -301,7 +347,14 @@ the latest push builds clean.
 | `paging`   | map a frame at a high virtual address, poke it, unmap   |
 | `heap`     | exercise `tmalloc`/`tfree`                              |
 | `aspace`   | create 2 address spaces, show same-VA isolation, teardown |
-| `echo`     | print the rest of the line                              |
+| `ls`       | list a directory (default `/`)                            |
+| `cat`      | print a file (ramfs, procfs, sysfs)                       |
+| `mkdir`    | create a directory (parents are created on demand)        |
+| `touch`    | create an empty file                                      |
+| `rm`       | remove a file or directory (recursively)                  |
+| `write`    | write text into an existing file                          |
+| `mount`    | list mounted filesystems (`procfs`, `sysfs`)              |
+| `echo`     | print the rest of the line                                |
 | `die`      | divide by zero — demonstrates the exception handler     |
 
 ## Roadmap
@@ -312,7 +365,7 @@ the latest push builds clean.
 | **M1** | Done | IDT, PIC, PIT, PS/2 keyboard |
 | **M2** | Done | Memory map, bitmap PMM, paging, heap, higher half, address spaces |
 | **M3** | Active | Shell upgrades: history, argv expansion, environment |
-| **M4** | Next   | RAM filesystem (initrd → ramfs/tarfs, VFS) |
+| **M4** | Done | RAM filesystem: initrd → ramfs VFS, procfs/sysfs, fs commands |
 | **M5** | Later  | Security hardening: NX, SMEP/SMAP, W^X, KASLR, RAM scrub |
 | **M6** | Later  | Processes: scheduler, IPC, user mode + syscalls |
 
@@ -324,9 +377,11 @@ Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 
 ```
 boot/                  boot-time assembly (boot.asm, gdt.asm, isr_stubs.asm)
+boot/ramfs.img         initrd, generated by `make` (ustar) — gitignored
+initrd/                root filesystem staging (tar'd into the initrd)
 src/                   kernel sources (flat, self-contained modules)
   ternel.c             entry point + console + command interpreter
-  tstring.{c,h}        libc-string subset (t-prefixed)
+  tstring.{c,h}        libc-string subset (t-prefixed) + tsprintf
   vga.{c,h}            VGA text-mode driver
   serial.{c,h}         COM1 UART + tlog()
   teyboard.{c,h}       PS/2 keyboard
@@ -336,10 +391,14 @@ src/                   kernel sources (flat, self-contained modules)
   tmalloc.{c,h}        kernel heap
   tpmm.{c,h}           bitmap physical memory manager
   tvmm.{c,h}           paging + per-process address spaces
+  tfs.{c,h}            ramfs VFS core
+  ttarfs.c             ustar tar unpacker + initrd loader
+  tprocfs.{c,h}        /proc virtual filesystem
+  tsysfs.{c,h}         /sys virtual filesystem
 user/                  userspace programs (planned, M6)
 docs/PLAN.md           detailed architecture + roadmap
 linker.ld              higher-half kernel link script
-grub.cfg               GRUB2 menu config
+grub.cfg               GRUB2 menu config (multiboot2 + module2 initrd)
 Makefile               build system
 build.sh               deps/build/iso/run/usb/clean wrapper
 .github/workflows/     CI (builds kernel + ISO on every push)

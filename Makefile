@@ -47,11 +47,19 @@ traitos.bin: $(KERN_OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(KERN_OBJS) -o $@
 	@echo "Kernel: $$(ls -lh $@ | awk '{print $$5}')"
 
+RAMFS_IMG = boot/ramfs.img
+
+$(RAMFS_IMG): $(shell find initrd -type f 2>/dev/null)
+	@mkdir -p boot
+	@tar --format=ustar -cf $(RAMFS_IMG) -C initrd .
+	@echo "RAMFS: $$(ls -lh $(RAMFS_IMG) | awk '{print $$5}')"
+
 user-programs: $(USER_PROGS)
 
-iso: traitos.bin
+iso: traitos.bin $(RAMFS_IMG)
 	@mkdir -p iso/boot/grub
 	@cp traitos.bin iso/boot/traitos.bin && cp grub.cfg iso/boot/grub/grub.cfg
+	@cp $(RAMFS_IMG) iso/boot/ramfs.img
 	@$(GRUB_MKR) -o traitos.iso iso/
 	@echo "ISO: $$(ls -lh traitos.iso | awk '{print $$5}')"
 
@@ -59,6 +67,6 @@ run: iso
 	qemu-system-x86_64 -cdrom traitos.iso -serial stdio -m 256M
 
 clean:
-	@rm -f $(KERN_OBJS) traitos.bin traitos.iso
+	@rm -f $(KERN_OBJS) traitos.bin traitos.iso $(RAMFS_IMG)
 
 .PHONY: all iso run clean user-programs
