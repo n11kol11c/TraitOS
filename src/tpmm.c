@@ -225,6 +225,54 @@ found:
     return (uintptr_t)start * PAGE_SIZE;
 }
 
+/* Allocate `pages` contiguous physical frames strictly below 1 GiB, so the
+ * result is reachable through the boot identity map and the higher-half
+ * physmap window (used for the user-program loader's memcpy). */
+uintptr_t tpmm_alloc_low_contig(size_t pages)
+{
+    uint32_t cap = 0x40000;   /* frame 0x40000 = phys 1 GiB */
+    if (cap > total_frames)
+        cap = total_frames;
+    if (pages == 0 || pages > cap)
+        return 0;
+
+    uint32_t run = 0;
+    uint32_t start = 0;
+    unsigned long flags = lock_intr();
+
+    for (uint32_t f = first_free_hint; f < cap; f++) {
+        if (!bit_test(f)) {
+            if (run == 0)
+                start = f;
+            if (++run == pages)
+                goto found;
+        } else {
+            run = 0;
+        }
+    }
+    for (uint32_t f = 0; f < first_free_hint && f < cap; f++) {
+        if (!bit_test(f)) {
+            if (run == 0)
+                start = f;
+            if (++run == pages)
+                goto found;
+        } else {
+            run = 0;
+        }
+    }
+    unlock_intr(flags);
+    return 0;
+
+found:
+    for (uint32_t i = 0; i < pages; i++) {
+        bit_set(start + i);
+        free_frames--;
+    }
+    first_free_hint = start + pages;
+    unlock_intr(flags);
+    return (uintptr_t)start * PAGE_SIZE;
+}
+
 void tpmm_free(uintptr_t phys)
 {
     uint32_t frame = (uint32_t)(phys / PAGE_SIZE);

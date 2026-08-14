@@ -8,6 +8,7 @@ void      tpmm_init(uintptr_t mbi);
 uintptr_t tpmm_alloc(void);
 uintptr_t tpmm_alloc_contig(size_t pages);
 uintptr_t tpmm_alloc_low(void);
+uintptr_t tpmm_alloc_low_contig(size_t pages);
 void      tpmm_free(uintptr_t phys);
 uint32_t  tpmm_free_frames(void);
 uint32_t  tpmm_used_frames(void);
