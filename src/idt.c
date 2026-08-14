@@ -186,11 +186,15 @@ void isr_handler(registers_t *r)
 void irq_handler(registers_t *r)
 {
     int irq = (int)(r->int_no - 32);
-    if (irq >= 0 && irq < 16 && irq_handlers[irq])
-        irq_handlers[irq](r);
 
-    /* signal end-of-interrupt to the PIC(s) */
+    /* Signal end-of-interrupt BEFORE dispatching: the timer's handler may
+     * preempt the current task (context switch) and only return much later,
+     * which would otherwise leave the PIC stuck on its in-service bit and
+     * block every lower-priority interrupt until the task is rescheduled. */
     if (r->int_no >= 40)
         outb(PIC2_COMMAND, PIC_EOI);
     outb(PIC1_COMMAND, PIC_EOI);
+
+    if (irq >= 0 && irq < 16 && irq_handlers[irq])
+        irq_handlers[irq](r);
 }
