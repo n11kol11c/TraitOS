@@ -72,6 +72,7 @@ static void cmd_paging(int argc, char **argv);
 static void cmd_heap(int argc, char **argv);
 static void cmd_echo(int argc, char **argv);
 static void cmd_die(int argc, char **argv);
+static void cmd_aspace(int argc, char **argv);
 
 static const struct {
     const char *name;
@@ -88,6 +89,7 @@ static const struct {
     { "heap",   cmd_heap,   "exercise the kernel heap (tmalloc/tfree)" },
     { "echo",   cmd_echo,   "print the rest of the line" },
     { "die",    cmd_die,    "divide by zero (panic demo)" },
+    { "aspace", cmd_aspace, "demo per-process address spaces (page tables)" },
 };
 
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
@@ -119,7 +121,7 @@ static void cmd_ver(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    tprintf(" TraitOS v0.4.0 (x86_64, Multiboot2)\n");
+    tprintf(" TraitOS v0.5.0 (x86_64, Multiboot2)\n");
 }
 
 static void cmd_info(int argc, char **argv)
@@ -222,6 +224,62 @@ static void cmd_die(int argc, char **argv)
     tprintf(" result: %d\n", 5 / (x - 1));
 }
 
+static void cmd_aspace(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    uintptr_t addr = 0x0000008000000000ULL;   /* 512 GiB: PML4 slot 1 */
+
+    vmm_aspace_t *kernel = vmm_aspace_current();
+
+    vmm_aspace_t *a = vmm_aspace_create();
+    vmm_aspace_t *b = vmm_aspace_create();
+    if (!a || !b) {
+        tprintf(" out of memory\n");
+        return;
+    }
+
+    uintptr_t pa = tpmm_alloc();
+    uintptr_t pb = tpmm_alloc();
+    if (!pa || !pb) {
+        tprintf(" out of frames\n");
+        if (pa)
+            tpmm_free(pa);
+        if (pb)
+            tpmm_free(pb);
+        vmm_aspace_destroy(a);
+        vmm_aspace_destroy(b);
+        return;
+    }
+
+    vmm_aspace_map(a, addr, pa, VMM_PAGE_WRITE | VMM_PAGE_USER);
+    vmm_aspace_map(b, addr, pb, VMM_PAGE_WRITE | VMM_PAGE_USER);
+    tprintf(" 2 address spaces, same virtual page mapped in both\n");
+
+    vmm_aspace_switch(a);
+    *(volatile uint32_t *)addr = 0x11111111;
+    tprintf("  in space A: wrote 0x11111111, read back 0x%x\n",
+            *(volatile uint32_t *)addr);
+
+    vmm_aspace_switch(b);
+    *(volatile uint32_t *)addr = 0x22222222;
+    tprintf("  in space B: wrote 0x22222222, read back 0x%x\n",
+            *(volatile uint32_t *)addr);
+
+    vmm_aspace_switch(a);
+    tprintf("  in space A: still 0x%x (per-process isolation works)\n",
+            *(volatile uint32_t *)addr);
+
+    vmm_aspace_switch(kernel);
+    vmm_aspace_unmap(a, addr);
+    vmm_aspace_unmap(b, addr);
+    tpmm_free(pa);
+    tpmm_free(pb);
+    vmm_aspace_destroy(a);
+    vmm_aspace_destroy(b);
+    tprintf(" spaces torn down, frames returned\n");
+}
+
 static int tokenize(char *line, char **argv, int max)
 {
     int argc = 0;
@@ -274,12 +332,12 @@ void ternel_main(uintptr_t mbi)
     tpmm_init(mbi);
     vmm_init();
 
-    tlog("TraitOS v0.4.0 booted on x86_64\n");
+    tlog("TraitOS v0.5.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
 
     tprintf("===============================================\n");
-    tprintf(" TraitOS v0.4.0 - RAM-resident, amnesic OS\n");
+    tprintf(" TraitOS v0.5.0 - RAM-resident, amnesic OS\n");
     tprintf("===============================================\n\n");
 
     tprintf(" Type 'help' for a list of commands.\n");
