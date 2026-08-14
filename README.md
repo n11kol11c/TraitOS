@@ -38,8 +38,8 @@ own physical memory manager, paging, per-process address spaces, a heap, and a
 RAM filesystem — all surfaced through an interactive TUI shell.
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
-> M2 (memory management), and M4 (RAM filesystem) are complete. See
-> [Roadmap](#roadmap).
+> M2 (memory management), M3 (TUI shell), and M4 (RAM filesystem) are
+> complete. See [Roadmap](#roadmap).
 
 ---
 
@@ -61,10 +61,13 @@ RAM filesystem — all surfaced through an interactive TUI shell.
   PIT, PS/2 keyboard with shift/caps and a ring buffer.
 - **Interactive shell** — `help`, `info`, `alloc`, `paging`, `heap`, `aspace`,
   filesystem commands (`ls`, `cat`, `mkdir`, `touch`, `rm`, `write`, `mount`),
-  history with up/down-arrow recall, `"quoted"` arguments, `$VAR` expansion
-  (`set`/`env`), and a `die` command that deliberately page-faults to show the
-  exception path.
-- **CI on every push** — GitHub Actions builds `traitos.bin` + `traitos.iso`.
+  a real line editor (left/right arrows, Home/End, Del, mid-line insert),
+  history with up/down-arrow recall and `!n` / `!!` re-run, `"quoted"`
+  arguments, `$VAR` expansion (`set`/`env`), `#` comments, plus
+  `whoami`/`halt`/`reboot` and a `die` command that deliberately page-faults
+  to show the exception path.
+- **CI on every push** — GitHub Actions builds `traitos.bin` + `traitos.iso`
+  and runs the QEMU-free host smoke tests.
 
 ---
 
@@ -76,7 +79,7 @@ Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
 GRUB 2.06 ── "TraitOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.6.0 - RAM-resident, amnesic OS
+ TraitOS v0.7.0 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.
@@ -96,6 +99,9 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    hist      show command history (up/down arrows recall)
    env       show environment variables
    set       set an environment variable (KEY=VALUE)
+   whoami    print the current user (from $USER)
+   halt      halt the CPU (power-off not implemented)
+   reboot    reboot via the keyboard controller (8042)
    ls        list a directory (default /)
    cat       print a file (ramfs, procfs, sysfs)
    mkdir     create a directory
@@ -136,6 +142,16 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
   procfs  ->  proc
   sysfs   ->  sys
 
+   > whoami
+ root
+
+   > echo "hello, $USER from $HOSTNAME"
+ hello, root from traitos
+
+   > !1
+   > whoami
+ root
+
    > aspace
  2 address spaces, same virtual page mapped in both
   in space A: wrote 0x11111111, read back 0x11111111
@@ -148,8 +164,8 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
 ```
 
 `die` intentionally divides by zero — the IDT catches it, prints an exception
-report, and the machine halts. It is the closest thing to a panic demo an OS
-can ship.
+report, and the machine halts. `halt` does the same without the fault, and
+`reboot` pulses the 8042 keyboard controller to restart the machine.
 
 ---
 
@@ -229,7 +245,8 @@ Key rules:
 | `boot/boot.asm`              | Multiboot2 header, boot page tables, long-mode switch, entry |
 | `boot/gdt.asm`               | Boot-time GDT (low) + `gdt_reload` (higher half)             |
 | `boot/isr_stubs.asm`         | 48 assembly interrupt entry stubs                            |
-| `src/ternel.c`               | Entry point, console printf, command interpreter             |
+| `src/ternel.c`               | Entry point, console printf, line editor, command table    |
+| `src/tsh.{c,h}`              | Host-testable shell: env vars, tokenizer, history, `!n`    |
 | `src/tfs.{c,h}`              | Ramfs VFS: node tree, `mkdir -p`, `write`, rm, virtual nodes |
 | `src/ttarfs.c`               | ustar unpacker + Multiboot2 initrd module loader             |
 | `src/tprocfs.{c,h}`          | `/proc`: uptime, version, meminfo, heapinfo                  |
@@ -300,12 +317,13 @@ ustar archive and tells GRUB to load it with a `module2` line in `grub.cfg`.
 ### Verify without an emulator
 
 `make smoke` compiles the filesystem modules (`tfs`, `ttarfs`, `tprocfs`,
-`tsysfs`) against the host libc with small stubs for kernel-only symbols, then
-unpacks the real `boot/ramfs.img` and checks the tree: it walks every node,
-cats the sample files, exercises `write`/`rm`/`mkdir -p`, and prints
-`SMOKE TEST PASSED` when everything is correct. CI runs it on every push, so
-the RAM filesystem is verified on your machine **and** in GitHub Actions with
-zero emulators involved.
+`tsysfs`) and the shell module (`tsh`) against the host libc with small stubs
+for kernel-only symbols, then runs two checks: it unpacks the real
+`boot/ramfs.img` and verifies the tree (walk, cat, `write`/`rm`/`mkdir -p`),
+and it exercises the tokenizer (`"quotes"`, `\` escapes, `$VAR` expansion,
+`#` comments) plus history (`push`/dedupe/`!n`). CI runs it on every push, so
+the RAM filesystem and shell are verified on your machine **and** in GitHub
+Actions with zero emulators involved.
 
 ### Run in an emulator (optional)
 
@@ -372,6 +390,9 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `hist`     | show command history (up/down arrows recall lines)        |
 | `env`      | show environment variables                                |
 | `set`      | set an environment variable (`KEY=VALUE`)                 |
+| `whoami`   | print the current user (from `$USER`)                     |
+| `halt`     | halt the CPU (power-off not implemented)                  |
+| `reboot`   | reboot via the 8042 keyboard controller                   |
 | `ls`       | list a directory (default `/`)                            |
 | `cat`      | print a file (ramfs, procfs, sysfs)                       |
 | `mkdir`    | create a directory (parents are created on demand)        |
@@ -389,7 +410,7 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M0** | Done | Boot, long-mode switch, VGA/serial console, ISO + USB |
 | **M1** | Done | IDT, PIC, PIT, PS/2 keyboard |
 | **M2** | Done | Memory map, bitmap PMM, paging, heap, higher half, address spaces |
-| **M3** | Active | Shell upgrades: history, argv expansion, environment |
+| **M3** | Done | Shell: line editing, history + `!n`, quoting, `$VAR`, env, `reboot` |
 | **M4** | Done | RAM filesystem: initrd → ramfs VFS, procfs/sysfs, fs commands |
 | **M5** | Later  | Security hardening: NX, SMEP/SMAP, W^X, KASLR, RAM scrub |
 | **M6** | Later  | Processes: scheduler, IPC, user mode + syscalls |
@@ -405,8 +426,9 @@ boot/                  boot-time assembly (boot.asm, gdt.asm, isr_stubs.asm)
 boot/ramfs.img         initrd, generated by `make` (ustar) — gitignored
 initrd/                root filesystem staging (tar'd into the initrd)
 src/                   kernel sources (flat, self-contained modules)
-  ternel.c             entry point + console + command interpreter
+  ternel.c             entry point + console + line editor + command table
   tstring.{c,h}        libc-string subset (t-prefixed) + tsprintf
+  tsh.{c,h}            shell: env vars, tokenizer, history + !n (host-tested)
   vga.{c,h}            VGA text-mode driver
   serial.{c,h}         COM1 UART + tlog()
   teyboard.{c,h}       PS/2 keyboard
@@ -420,6 +442,7 @@ src/                   kernel sources (flat, self-contained modules)
   ttarfs.c             ustar tar unpacker + initrd loader
   tprocfs.{c,h}        /proc virtual filesystem
   tsysfs.{c,h}         /sys virtual filesystem
+tests/                 host-side smoke tests (make smoke, no emulator)
 user/                  userspace programs (planned, M6)
 docs/PLAN.md           detailed architecture + roadmap
 linker.ld              higher-half kernel link script

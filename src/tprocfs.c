@@ -17,7 +17,7 @@ static void gen_uptime(tfs_node_t *node, char *buf, size_t bufsz)
 static void gen_version(tfs_node_t *node, char *buf, size_t bufsz)
 {
     node->size = (size_t)tsprintf(buf, bufsz,
-        "TraitOS v0.6.0 (x86_64, Multiboot2)\n");
+        "TraitOS v0.7.0 (x86_64, Multiboot2)\n");
 }
 
 static void gen_meminfo(tfs_node_t *node, char *buf, size_t bufsz)

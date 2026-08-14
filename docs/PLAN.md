@@ -46,8 +46,9 @@ boot/                    boot assembly (boot.asm, gdt.asm), ramfs.img initrd
 src/                     flat kernel modules
   ternel.c, tstring.*, vga.*, serial.*
   teyboard.*, gdt.*, idt.*, timer.*, tmalloc.*, tpmm.*, tvmm.*
-  tfs.*, ttarfs.*, tprocfs.*, tsysfs.*    (RAM filesystem + proc/sys)
+  tfs.*, ttarfs.*, tprocfs.*, tsysfs.*, tsh.*    (filesystem + shell core)
 initrd/                  root filesystem staging (tar'd into boot/ramfs.img)
+tests/                   host-side smoke tests (fs_smoke.c, shell_smoke.c)
 user/                    userspace programs (planned)
 linker.ld                kernel link script (loads at 1 MiB, higher-half VMA)
 grub.cfg                 GRUB2 menu config (multiboot2 + module2 initrd)
@@ -86,10 +87,12 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 ### M3 — TUI shell
 - [x] Kernel command line: `help`, `clear`, `uptime`, `ver`, `info`, `alloc`,
       `echo`, `die` (panic demo) — line editing + backspace in `src/ternel.c`
-- [x] Command history with up/down-arrow recall (`src/ternel.c`, `hist` cmd),
-      `"quoted"` arguments, `\` escapes, `$VAR` expansion and `set`/`env`
-      (`src/tsh.c`, host-tested by `make smoke`)
-- [ ] History persistence across sessions, argv globbing, pipelines
+- [x] Command history with up/down-arrow recall, `!n` / `!!` re-run,
+      `#` comments, `"quoted"` arguments, `\` escapes, `$VAR` expansion and
+      `set`/`env` — extracted to `src/tsh.c`, host-tested by `make smoke`
+- [x] Line editor: left/right arrows, Home/End, Del, mid-line insert
+- [x] `whoami`, `halt`, `reboot` (8042 keyboard-controller reset)
+- [ ] History persistence across sessions, globbing, pipelines, tab-completion
 - [ ] Framebuffer console with simple fonts (optional)
 
 ### M4 — RAM filesystem
