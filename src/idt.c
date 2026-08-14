@@ -22,6 +22,7 @@ typedef struct {
 
 #define KERNEL_CODE_SELECTOR 0x08
 #define IDT_FLAG_GATE64      0x8E /* present, ring 0, 64-bit interrupt gate */
+#define IDT_FLAG_GATE64_USER 0xEE /* present, DPL 3, 64-bit interrupt gate */
 
 #define PIC1_COMMAND 0x20
 #define PIC1_DATA    0x21
@@ -39,6 +40,7 @@ ISR_DECL(16) ISR_DECL(17) ISR_DECL(18) ISR_DECL(19)
 ISR_DECL(20) ISR_DECL(21) ISR_DECL(22) ISR_DECL(23)
 ISR_DECL(24) ISR_DECL(25) ISR_DECL(26) ISR_DECL(27)
 ISR_DECL(28) ISR_DECL(29) ISR_DECL(30) ISR_DECL(31)
+ISR_DECL(128)
 IRQ_DECL(0)  IRQ_DECL(1)  IRQ_DECL(2)  IRQ_DECL(3)
 IRQ_DECL(4)  IRQ_DECL(5)  IRQ_DECL(6)  IRQ_DECL(7)
 IRQ_DECL(8)  IRQ_DECL(9)  IRQ_DECL(10) IRQ_DECL(11)
@@ -134,6 +136,10 @@ void idt_init(void)
     idt_set_gate(29, (uint64_t)isr29, KERNEL_CODE_SELECTOR, IDT_FLAG_GATE64);
     idt_set_gate(30, (uint64_t)isr30, KERNEL_CODE_SELECTOR, IDT_FLAG_GATE64);
     idt_set_gate(31, (uint64_t)isr31, KERNEL_CODE_SELECTOR, IDT_FLAG_GATE64);
+
+    /* syscall gate: vector 128 callable from ring 3 via `int 0x80` */
+    idt_set_gate(128, (uint64_t)isr128, KERNEL_CODE_SELECTOR,
+                 IDT_FLAG_GATE64_USER);
 
     idt_set_gate(32, (uint64_t)irq0, KERNEL_CODE_SELECTOR, IDT_FLAG_GATE64);
     idt_set_gate(33, (uint64_t)irq1, KERNEL_CODE_SELECTOR, IDT_FLAG_GATE64);

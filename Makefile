@@ -31,6 +31,7 @@ KERN_OBJS = \
     src/tstring.o src/vga.o src/serial.o \
     src/teyboard.o src/gdt.o src/tss.o src/idt.o src/timer.o src/tmalloc.o src/tpmm.o src/tvmm.o \
     src/tsec.o \
+    src/tsys.o \
     src/tfs.o src/ttarfs.o src/tprocfs.o src/tsysfs.o src/tsh.o \
     src/ttask.o src/tipc.o \
     src/ternel.o

@@ -138,6 +138,52 @@ vmm_aspace_t *vmm_aspace_current(void)
     return current;
 }
 
+vmm_aspace_t *vmm_aspace_kernel(void)
+{
+    return &kernel_aspace;
+}
+
+/* Is the page covering `virt` mapped in the current address space with the
+ * required permission bits set? Walks the current PML4 by hand so it works
+ * on any space (the shared kernel slots included). */
+static int page_has(uintptr_t virt, uint64_t need)
+{
+    uint64_t *pdpt = table_lookup(current->pml4, PML4_INDEX(virt));
+    if (!pdpt)
+        return 0;
+    uint64_t *pd = table_lookup(pdpt, PDPT_INDEX(virt));
+    if (!pd)
+        return 0;
+    uint64_t pe = pd[PD_INDEX(virt)];
+    if (pe & (1ull << 7))   /* 2 MiB huge page */
+        return (pe & need) == need;
+    uint64_t *pt = table_lookup(pd, PD_INDEX(virt));
+    if (!pt)
+        return 0;
+    return (pt[PT_INDEX(virt)] & need) == need;
+}
+
+int vmm_range_user(uintptr_t addr, size_t len, int write)
+{
+    uint64_t need = VMM_PAGE_PRESENT | VMM_PAGE_USER;
+    if (write)
+        need |= VMM_PAGE_WRITE;
+
+    if (len == 0)
+        return 1;
+    if (addr < VMM_USER_BASE)
+        return 0;
+    if (addr > VMM_USER_END || len > VMM_USER_END - addr)
+        return 0;
+
+    uintptr_t start = addr & ~(uintptr_t)0xFFF;
+    uintptr_t end = addr + len;
+    for (uintptr_t p = start; p < end; p += 0x1000)
+        if (!page_has(p, need))
+            return 0;
+    return 1;
+}
+
 /* Only the user slots (1..255) may be mapped/unmapped through an address
  * space. Slots 0 and 256..511 are the shared kernel view (identity map +
  * higher half); touching them here would corrupt the kernel's page tables
