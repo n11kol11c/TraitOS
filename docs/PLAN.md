@@ -72,11 +72,13 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 ### M2 — Memory management
 - [x] Parse Multiboot2 memory map and framebuffer info
 - [x] Bitmap **PMM** with page alloc/free (`src/tpmm.c`), first-fit scan
-- [x] `vmm` paging: map/unmap 4 KiB pages on the boot identity map (`src/tvmm.c`)
+- [x] `vmm` paging: map/unmap 4 KiB pages, tables resolved via the
+      higher-half physmap window (`src/tvmm.c`)
 - [x] Heap (`tmalloc`) on top of PMM: first-fit free list + bump grow (`src/tmalloc.c`)
 - [x] Higher-half kernel: linked at `0xFFFFFFFF80000000`, loaded low by GRUB,
       boot.asm maps 1 GiB (identity + higher half) before entering `ternel_main`
-- [ ] User/kernel page tables (per-process address spaces)
+- [x] Per-process address spaces (`vmm_aspace_*`): independent PML4 trees that
+      clone the kernel view, switch via CR3, with user slots 1..255 free
 
 ### M3 — TUI shell
 - [x] Kernel command line: `help`, `clear`, `uptime`, `ver`, `info`, `alloc`,
