@@ -9,18 +9,19 @@ No disk writes. No forensic trail. Just you and the kernel.
 
 [![Build](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.10.0-blueviolet)](https://github.com/n11kol11c/TraitOS/releases)
+[![Version](https://img.shields.io/badge/version-v0.11.0-blueviolet)](https://github.com/n11kol11c/TraitOS/releases)
 [![Platform](https://img.shields.io/badge/Platform-x86__64-blue.svg)]()
 [![Language](https://img.shields.io/badge/Language-C11%20+%20NASM-lightgrey.svg)]()
 [![Boot](https://img.shields.io/badge/Boot-GRUB2%20Multiboot2-green.svg)]()
 [![Memory](https://img.shields.io/badge/Memory-Higher--Half%20kernel-brightgreen.svg)]()
 [![RAM-resident](https://img.shields.io/badge/RAM--resident-Yes-brightgreen.svg)]()
 
-[![Milestone](https://img.shields.io/badge/milestone-M6b%20IPC-blue)](https://github.com/n11kol11c/TraitOS/blob/main/docs/PLAN.md)
+[![Milestone](https://img.shields.io/badge/milestone-M6c%20user%20mode-blue)](https://github.com/n11kol11c/TraitOS/blob/main/docs/PLAN.md)
 [![Multitasking](https://img.shields.io/badge/multitasking-preemptive%20round--robin-orange)]()
 [![IPC](https://img.shields.io/badge/ipc-mailboxes%20%2B%20mutex-yellow)]()
+[![User mode](https://img.shields.io/badge/user%20mode-ring--3%20tasks%20%2B%20int%200x80-brightgreen)]()
 [![Security](https://img.shields.io/badge/security-NX%20W%5EX%20SMEP%20SMAP%20KASLR-informational)]()
-[![Tests](https://img.shields.io/badge/tests-5%20suites%2C%20no%20emulator-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-6%20suites%2C%20no%20emulator-brightgreen)]()
 
 **Runs on real hardware (BIOS + UEFI) and in emulators — no libc, no runtime, no dependencies.**
 
@@ -50,12 +51,14 @@ RAM filesystem — all surfaced through an interactive TUI shell.
 | **Language** | C11 (clang, freestanding) + NASM | **Kernel** | Higher-half, non-relocatable image w/ physical KASLR |
 | **Memory** | Bitmap PMM, paging, per-process address spaces | **Storage** | None — initrd → ramfs, RAM-resident |
 | **Multitasking** | Preemptive round-robin (PIT, 100 Hz) | **IPC** | Blocking mailboxes + recursive mutex |
-| **Security** | NX, W^X, SMEP/SMAP, KASLR, stack guard, RAM scrub | **Verification** | 5 host-side smoke suites + CI, no emulator |
+| **User mode** | Ring-3 tasks, `int 0x80` syscalls, per-process address spaces | **Storage** | None — initrd → ramfs, RAM-resident |
+| **Security** | NX, W^X, SMEP/SMAP, KASLR, stack guard, RAM scrub | **Verification** | 6 host-side smoke suites + CI, no emulator |
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
 > M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), M5 (security
-> hardening), M6a (preemptive multitasking), and M6b (IPC) are complete; M6c
-> (user mode + syscalls) is next. See [Roadmap](#roadmap).
+> hardening), M6a (preemptive multitasking), M6b (IPC), and M6c (user mode +
+> syscalls) are complete; M7 (scheduler polish) is next. See
+> [Roadmap](#roadmap).
 
 ---
 
@@ -83,6 +86,12 @@ RAM filesystem — all surfaced through an interactive TUI shell.
   delivery of 100 messages; `mutex` proves mutual exclusion by checking a
   shared counter reaches exactly 3×N. All primitive math is host-tested by
   `make smoke`.
+- **User mode (M6c)** — ring-3 processes entered through a `int 0x80` syscall
+  gate (DPL-3 IDT vector 128) with a TSS per-task kernel stack and CR3
+  switching to per-process address spaces. A pure ELF64 loader
+  (`telf_core.h`, host-tested) loads `user/` programs embedded in the kernel
+  image; the `run` command spawns them (`hello`, `spinner`). Syscalls:
+  `write`, `exit`, `getpid`, `yield`, `sleep`.
 - **Concurrency hardening (v0.9.1)** — the heap, the physical-memory bitmap,
   and the VMM address-space API were audited for the new scheduler: PML4
   slots 0 and 256..511 (the shared kernel view) can no longer be mapped or
@@ -147,6 +156,7 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    spawn     spawn a demo task
    burst     spawn N demo tasks
    yield     yield the CPU to another task
+   run       run a user-mode program (hello, spinner)
    ipc       mailbox demo: writer/reader block on a shared queue
    mutex     mutex demo: 3 tasks share a protected counter
    ls        list a directory (default /)
@@ -237,6 +247,20 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
       (the writer/reader park themselves on the mailbox; the workers
        serialize on the mutex - run `tasks` to watch them block)
 
+    > run hello
+  hello: pid 6 - running as a ring-3 task on its own address space
+  hello from user mode!
+  hello: exiting (2 syscalls so far)
+
+    > run spinner
+  spinner: pid 7 - user  count 0  count 1  count 2  ...
+      (a ring-3 loop using write/getpid/sleep via int 0x80)
+
+    > tasks
+  id  name        state    prio  ticks
+  0   idle        ready      0    1802
+  7   spinner     user       1    1013
+
     > uptime
  uptime: 12s (1247 ticks)
 ```
@@ -326,6 +350,11 @@ Key rules:
 | `boot/isr_stubs.asm`         | 48 assembly interrupt entry stubs                            |
 | `src/ternel.c`               | Entry point, console printf, line editor, command table    |
 | `src/ttask.{c,h}`            | Preemptive round-robin scheduler + block/wake (M6a/M6b)    |
+| `src/ttask_core.h`           | Pure round-robin/priority pick math (host-tested)          |
+| `src/tsys.{c,h}`             | `int 0x80` syscall table: write/exit/getpid/yield/sleep    |
+| `src/telf.{c,h}`             | User ELF loader: map PT_LOADs into a fresh address space   |
+| `src/telf_core.h`            | Pure ELF64 header/segment parser (host-tested)             |
+| `src/tss.{c,h}`              | TSS: per-task ring-3 kernel stacks (RSP0), I/O map         |
 | `src/tipc.{c,h}`            | IPC: blocking mailboxes + recursive mutex (M6b)             |
 | `src/tipc_core.h`           | Pure mailbox/wait-queue/mutex math (host-tested)            |
 | `src/tsh.{c,h}`              | Host-testable shell: env vars, tokenizer, history, `!n`    |
@@ -342,7 +371,7 @@ Key rules:
 | `src/teyboard.{c,h}`         | PS/2 keyboard: set-1 scancodes, shift/caps, ring buffer      |
 | `src/vga.{c,h}`              | VGA text-mode driver (CP437 glyphs)                          |
 | `src/serial.{c,h}`           | COM1 UART + `tlog()` for serial logs                         |
-| `src/gdt.{c,h}`              | GDT reload glue                                              |
+| `src/gdt.{c,h}`              | Full GDT (kernel/user segments + TSS descriptor) + reload   |
 | `src/tstring.{c,h}`          | Dependency-free libc subset (`tstr*`/`tmem*`/`titoa`/`tsprintf`) |
 | `initrd/`                    | Root filesystem staging; `make` tars it into `boot/ramfs.img` |
 | `linker.ld`                  | Higher-half link script (VMA/LMA split for GRUB)             |
@@ -400,21 +429,24 @@ ustar archive and tells GRUB to load it with a `module2` line in `grub.cfg`.
 ### Verify without an emulator
 
 `make smoke` compiles the filesystem modules (`tfs`, `ttarfs`, `tprocfs`,
-`tsysfs`), the shell module (`tsh`) and the pure scheduler/IPC cores
-(`ttask_core.h`, `tipc_core.h`) against the host libc, then runs five
-checks: it unpacks the real `boot/ramfs.img` and verifies the tree (walk,
-cat, `write`/`rm`/`mkdir -p`), it exercises the tokenizer (`"quotes"`, `\`
-escapes, `$VAR` expansion, `#` comments) plus history (`push`/dedupe/`!n`),
+`tsysfs`), the shell module (`tsh`) and the pure scheduler/IPC/ELF cores
+(`ttask_core.h`, `tipc_core.h`, `telf_core.h`) against the host libc, then
+runs six checks: it unpacks the real `boot/ramfs.img` and verifies the tree
+(walk, cat, `write`/`rm`/`mkdir -p`), it exercises the tokenizer (`"quotes"`,
+`\` escapes, `$VAR` expansion, `#` comments) plus history (`push`/dedupe/`!n`),
 it verifies the M5 security core — for every one of the 512 window pages,
 with and without a KASLR relocation, the same pure helper the kernel uses
 must produce W^X correct PTEs (code RO+X, rodata RO, data NX, no page
 writable *and* executable) — it checks the scheduler's round-robin/priority
 pick over every task-table state (empty, single, wrap-around, priorities,
-exited, blocked), and it verifies the IPC core's mailbox ring and wait-queue
-math (wrap-around, full/empty, FIFO wakeups, a producer/consumer hand-off).
-CI runs it on every push, so the RAM filesystem, shell, security math,
-scheduling math, and IPC math are verified on your machine **and** in
-GitHub Actions with zero emulators involved.
+exited, blocked), it verifies the IPC core's mailbox ring and wait-queue
+math (wrap-around, full/empty, FIFO wakeups, a producer/consumer hand-off),
+and it verifies the ELF64 parser's header/segment math (entry, offsets,
+overflow/overlap/out-of-bounds rejection, W^X flags) against the exact
+`telf_core.h` the kernel embeds. CI runs it on every push, so the RAM
+filesystem, shell, security math, scheduling math, IPC math, and ELF
+parsing are verified on your machine **and** in GitHub Actions with zero
+emulators involved.
 
 ### Run in an emulator (optional)
 
@@ -492,6 +524,7 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `yield`    | yield the CPU to another task                             |
 | `ipc`      | mailbox demo: writer/reader block on a shared queue       |
 | `mutex`    | mutex demo: 3 tasks share a protected counter             |
+| `run`      | run a user-mode program (`hello`, `spinner`)               |
 | `ls`       | list a directory (default `/`)                            |
 | `cat`      | print a file (ramfs, procfs, sysfs)                       |
 | `mkdir`    | create a directory (parents are created on demand)        |
@@ -514,8 +547,8 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M5** | Done | Hardening: NX, W^X, SMEP/SMAP, physical KASLR, RAM scrub |
 | **M6a** | Done | Preemptive multitasking: round-robin scheduler, context switch, `tasks`/`spawn`/`burst`/`yield` |
 | **M6b** | Done | IPC: blocking mailboxes (`send`/`recv`), recursive mutex, `ipc`/`mutex` demos |
-| **M6c** | Next | User mode: TSS, syscalls, user ELF loader |
-| **M7** | Later | Multitasking polish: priorities, scheduler tuning, perf counters |
+| **M6c** | Done | User mode: TSS, `int 0x80` syscalls, user ELF loader, `run` command |
+| **M7** | Next | Multitasking polish: priorities, scheduler tuning, perf counters |
 
 Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -550,8 +583,12 @@ src/                   kernel sources (flat, self-contained modules)
   ttarfs.c             ustar tar unpacker + initrd loader
   tprocfs.{c,h}        /proc virtual filesystem
   tsysfs.{c,h}         /sys virtual filesystem
+  tsys.{c,h}           int 0x80 syscall table (ring-3 entry)
+  telf.{c,h}           user ELF loader
+  tss.{c,h}            TSS: per-task ring-3 kernel stacks
 tests/                 host-side smoke tests (make smoke, no emulator)
-user/                  userspace programs (planned, M6c)
+user/                  userspace programs (hello.S, spinner.S) + user.ld
+                       assembled into ELFs, embedded into the kernel image
 docs/PLAN.md           detailed architecture + roadmap
 linker.ld              higher-half kernel link script
 grub.cfg               GRUB2 menu config (multiboot2 + module2 initrd)
@@ -570,9 +607,9 @@ survives in memory.
 It does **not** defend against cold-boot/RAM-dump attacks, hardware
 (evil-maid) tampering, or firmware compromise — because no pure-software OS can
 do that. Kernel-image *virtual* KASLR (randomizing the kernel's virtual base)
-is also not implemented: it needs position-independent code + relocations,
-deferred to the user-mode milestone. See [`docs/PLAN.md`](docs/PLAN.md) for the
-full threat model.
+is also not implemented: it needs position-independent code + relocations, and
+remains a future milestone. See [`docs/PLAN.md`](docs/PLAN.md) for the full
+threat model.
 
 > **Disclaimer:** this is an educational project, not production security
 > software. Do not store secrets on it.

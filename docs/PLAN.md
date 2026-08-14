@@ -47,9 +47,10 @@ src/                     flat kernel modules
   ternel.c, tstring.*, vga.*, serial.*
   teyboard.*, gdt.*, idt.*, timer.*, tmalloc.*, tpmm.*, tvmm.*
   tfs.*, ttarfs.*, tprocfs.*, tsysfs.*, tsh.*    (filesystem + shell core)
+  tsys.* (syscalls), telf.* (user ELF loader), tss.* (ring-3 stacks)
 initrd/                  root filesystem staging (tar'd into boot/ramfs.img)
-tests/                   host-side smoke tests (fs_smoke.c, shell_smoke.c)
-user/                    userspace programs (planned)
+tests/                   host-side smoke tests (fs, shell, sec, ttask, ipc, elf)
+user/                    userspace programs (hello.S, spinner.S) + user.ld
 linker.ld                kernel link script (loads at 1 MiB, higher-half VMA)
 grub.cfg                 GRUB2 menu config (multiboot2 + module2 initrd)
 Makefile                 build system (KumOS-style KERN_OBJS)
@@ -167,12 +168,25 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
       increments must land on exactly 15000)
 - [ ] Semaphore (counting) on top of the mutex primitives
 
-#### M6c — User mode + syscalls (next)
-- [ ] TSS with ring-3 stacks; switch to user mode via `iretq`
-- [ ] `syscall`/`sysret` (or `int 0x80`) entry with a minimal syscall table
-- [ ] User ELF loader + `user/` programs (shell, demos)
-- [ ] Memory isolation between processes (paging); per-task address spaces
-- [ ] `user/` fills up with a shell and demo ELFs
+#### M6c — User mode + syscalls (done, v0.11.0)
+- [x] Full GDT with user segments + a TSS; `ltr` after load (`src/gdt.c`,
+      `src/tss.c`); per-task ring-3 kernel stacks via `tss_set_rsp0()`
+- [x] `int 0x80` syscall gate: DPL-3 IDT vector 128, isr stub + C table in
+      `src/tsys.c` — `write`/`exit`/`getpid`/`yield`/`sleep`; ring-0
+      callers rejected; SMAP user-buffer reads under `stac`/`clac`
+- [x] Ring-3 tasks (`ttask_create_user`): user-mode iretq frame, per-task
+      address spaces with CR3 switch + RSP0 swap on every pick, ring-3
+      faults kill the task instead of panicking
+- [x] Pure ELF64 ET_EXEC parser in `telf_core.h` (header/segment math,
+      overflow/overlap/out-of-bounds/W^X checks) — host-tested
+      (`tests/elf_smoke.c`, 28 checks)
+- [x] User ELF loader (`src/telf.c`): `tpmm_alloc_low_contig` frames filled
+      through the physmap window, mapped into a fresh address space
+- [x] `user/` programs: `hello.S`, `spinner.S` built with `user/user.ld`
+      (page-aligned sections, single region at VMM_USER_BASE), embedded in
+      the kernel via `ld -r -b binary`; `run` spawns them
+- [ ] Deferred: ring-3 syscalls for IPC (mailboxes/mutex from M6b)
+- [ ] Deferred: a userspace `kush`-style shell split out of the kernel
 
 ## Security model (honest scoping)
 
