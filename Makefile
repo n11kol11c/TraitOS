@@ -28,9 +28,9 @@ GRUB_MKR = $(shell command -v x86_64-elf-grub-mkrescue 2>/dev/null || command -v
 
 KERN_OBJS = \
     boot/boot.o boot/gdt.o boot/isr_stubs.o \
-    src/kstring.o src/vga.o src/serial.o \
-    src/keyboard.o src/gdt.o src/idt.o src/timer.o src/kmalloc.o \
-    src/kernel.o
+    src/tstring.o src/vga.o src/serial.o \
+    src/teyboard.o src/gdt.o src/idt.o src/timer.o src/tmalloc.o \
+    src/ternel.o
 
 USER_PROGS =
 

@@ -1,5 +1,5 @@
 #include "vga.h"
-#include "kstring.h"
+#include "tstring.h"
 
 #include <stddef.h>
 

@@ -3,11 +3,11 @@
 
 #include "vga.h"
 #include "serial.h"
-#include "keyboard.h"
+#include "teyboard.h"
 #include "gdt.h"
 #include "idt.h"
 #include "timer.h"
-#include "kmalloc.h"
+#include "tmalloc.h"
 
 /* Kernel console printf (KumOS-style, VGA only; use klog() for serial). */
 static void kprintf(const char *fmt, ...)

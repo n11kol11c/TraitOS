@@ -65,15 +65,15 @@ boot/                  boot-time assembly
   boot.asm             Multiboot2 header, paging, long-mode switch, entry
   gdt.asm              boot-time GDT + segment reload helper
 src/                   kernel sources (flat modules)
-  kernel.c             entry point + console kprintf
-  kstring.{c,h}        libc-string subset (k-prefixed)
+  ternel.c             entry point + console kprintf
+  tstring.{c,h}        libc-string subset (t-prefixed)
   vga.{c,h}            VGA text-mode driver (incl. CP437 box-drawing glyphs)
   serial.{c,h}         COM1 UART + klog()
-  keyboard.{c,h}       PS/2 keyboard (stub)
-  gdt.{c,h}            GDT reload glue (stub)
-  idt.{c,h}            IDT (stub)
-  timer.{c,h}          PIT (stub)
-  kmalloc.{c,h}        heap (stub)
+  teyboard.{c,h}       PS/2 keyboard
+  gdt.{c,h}            GDT reload glue
+  idt.{c,h}            IDT + PIC remap, IRQ dispatch
+  timer.{c,h}          PIT timer
+  tmalloc.{c,h}        heap (stub)
 user/                  userspace programs (planned, M6)
 linker.ld              kernel link script (loads at 1 MiB)
 grub.cfg               GRUB2 menu config

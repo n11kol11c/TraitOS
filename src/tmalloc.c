@@ -1,4 +1,4 @@
-#include "kmalloc.h"
+#include "tmalloc.h"
 
 /* Heap lands with the MM milestone (after PMM + paging). */
 void *kmalloc(size_t size)

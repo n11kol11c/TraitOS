@@ -44,8 +44,8 @@ KumOS API shapes and conventions are adapted, not copied verbatim.
 ```
 boot/                    boot assembly (boot.asm, gdt.asm)
 src/                     flat kernel modules
-  kernel.c, kstring.*, vga.*, serial.*
-  keyboard.*, gdt.*, idt.*, timer.*, kmalloc.*   (stubs → later milestones)
+  ternel.c, tstring.*, vga.*, serial.*
+  teyboard.*, gdt.*, idt.*, timer.*, tmalloc.*   (some stubs → later milestones)
 user/                    userspace programs (planned)
 linker.ld                kernel link script (loads at 1 MiB)
 grub.cfg                 GRUB2 menu config
