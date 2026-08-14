@@ -44,9 +44,16 @@ static const char scancode_shifted[128] = {
 #define SCAN_RSHIFT 0x36
 #define SCAN_CAPS   0x3A
 
+#define SCAN_E0_PREFIX 0xE0
+#define SCAN_ARROW_UP   0x48
+#define SCAN_ARROW_DOWN 0x50
+#define SCAN_ARROW_LEFT 0x4B
+#define SCAN_ARROW_RIGHT 0x4D
+
 static volatile char key_buffer[KEY_BUFFER_SIZE];
 static volatile size_t key_head = 0;
 static volatile size_t key_tail = 0;
+static volatile int e0_pending = 0;
 static int shift_pressed = 0;
 static int caps_on = 0;
 
@@ -79,13 +86,40 @@ static void teyboard_callback(registers_t *r)
     (void)r;
     scancode = inb(KEYBOARD_DATA);
 
-    if (scancode == 0xE0)
-        return;                            /* extended prefix (arrows etc.) */
+    if (scancode == SCAN_E0_PREFIX) {
+        e0_pending = 1;
+        return;                            /* next make code is extended */
+    }
 
     if (scancode & 0x80) {                 /* break code */
         uint8_t key = scancode & 0x7F;
+        if (e0_pending) {                  /* E0 release (e.g. arrow up) */
+            e0_pending = 0;
+            return;
+        }
         if (key == SCAN_LSHIFT || key == SCAN_RSHIFT)
             shift_pressed = 0;
+        return;
+    }
+
+    if (e0_pending) {
+        e0_pending = 0;
+        switch (scancode) {
+        case SCAN_ARROW_UP:
+            key_buffer_push((char)KEY_UP);
+            break;
+        case SCAN_ARROW_DOWN:
+            key_buffer_push((char)KEY_DOWN);
+            break;
+        case SCAN_ARROW_LEFT:
+            key_buffer_push((char)KEY_LEFT);
+            break;
+        case SCAN_ARROW_RIGHT:
+            key_buffer_push((char)KEY_RIGHT);
+            break;
+        default:
+            break;                         /* other E0 keys, drop */
+        }
         return;
     }
 
@@ -129,11 +163,11 @@ void teyboard_init(void)
     irq_register(1, teyboard_callback);
 }
 
-/* Returns -1 if no key is pending, otherwise the next character. */
+/* Returns KEY_NONE if no key is pending, otherwise the next key code. */
 int teyboard_getchar(void)
 {
     if (key_head == key_tail)
-        return -1;
+        return KEY_NONE;
     char c = key_buffer[key_head];
     key_head = (key_head + 1) % KEY_BUFFER_SIZE;
     return c;
