@@ -1,6 +1,7 @@
 #include "tvmm.h"
 
 #include "tpmm.h"
+#include "tmalloc.h"
 #include "tstring.h"
 
 #include <stdint.h>
@@ -17,12 +18,17 @@
 
 #define ADDR_MASK 0x000FFFFFFFFFF000ULL
 
+/* PML4 slots 0 (identity map of low memory) and 256..511 (higher half)
+ * form the kernel view, shared read-only by every address space. */
+#define KERNEL_PML4_START 256
+
 /* The boot page tables live below 1 GiB, and every table entry stores the
  * *physical* address of the next table. Resolve those through the
  * higher-half physmap window instead of the identity map. */
 #define TABLE_OF(e) ((uint64_t *)VMM_PHYS_TO_VIRT((e) & ADDR_MASK))
 
-static uint64_t *pml4 = NULL;
+static vmm_aspace_t kernel_aspace;
+static vmm_aspace_t *current = &kernel_aspace;
 
 static void tlb_flush_page(uintptr_t virt)
 {
@@ -62,12 +68,80 @@ void vmm_init(void)
 {
     uintptr_t cr3;
     __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
-    pml4 = TABLE_OF(cr3);
+    kernel_aspace.pml4_phys = cr3;
+    kernel_aspace.pml4 = TABLE_OF(cr3);
+    current = &kernel_aspace;
 }
 
-int vmm_map_page(uintptr_t virt, uintptr_t phys, uint32_t flags)
+vmm_aspace_t *vmm_aspace_create(void)
 {
-    uint64_t *pdpt = table_ensure(pml4, PML4_INDEX(virt), flags);
+    uintptr_t frame = tpmm_alloc_low();
+    if (!frame)
+        return NULL;
+
+    uint64_t *pml4 = TABLE_OF(frame);
+    tmemset(pml4, 0, 4096);
+
+    /* share the kernel view: identity map (slot 0) + higher half (256..511) */
+    for (int i = 0; i < 512; i++)
+        if (i == 0 || i >= KERNEL_PML4_START)
+            pml4[i] = kernel_aspace.pml4[i];
+
+    vmm_aspace_t *as = (vmm_aspace_t *)tmalloc(sizeof(vmm_aspace_t));
+    if (!as) {
+        tpmm_free(frame);
+        return NULL;
+    }
+    as->pml4_phys = frame;
+    as->pml4 = pml4;
+    return as;
+}
+
+/* Free a page-table frame, descending into children unless the entry is a
+ * huge page (PS bit) or a leaf. Only used for user-space (non-shared) tables. */
+static void free_table(uint64_t *table, int level)
+{
+    for (int i = 0; i < 512; i++) {
+        uint64_t e = table[i];
+        if (!(e & VMM_PAGE_PRESENT))
+            continue;
+        if (level > 0 && !(e & (1ull << 7)))
+            free_table(TABLE_OF(e), level - 1);
+        tpmm_free(e & ADDR_MASK);
+    }
+}
+
+void vmm_aspace_destroy(vmm_aspace_t *as)
+{
+    if (!as || as == current)
+        return;
+
+    /* the kernel half (slot 0 + 256..511) is shared, not owned; free only
+     * the user slots 1..255 that this space mapped on its own */
+    for (int i = 1; i < KERNEL_PML4_START; i++) {
+        uint64_t e = as->pml4[i];
+        if (e & VMM_PAGE_PRESENT)
+            free_table(TABLE_OF(e), 2);
+    }
+    tpmm_free(as->pml4_phys);
+    tfree(as);
+}
+
+void vmm_aspace_switch(vmm_aspace_t *as)
+{
+    __asm__ volatile("mov %0, %%cr3" : : "r"(as->pml4_phys) : "memory");
+    current = as;
+}
+
+vmm_aspace_t *vmm_aspace_current(void)
+{
+    return current;
+}
+
+int vmm_aspace_map(vmm_aspace_t *as, uintptr_t virt, uintptr_t phys,
+                   uint32_t flags)
+{
+    uint64_t *pdpt = table_ensure(as->pml4, PML4_INDEX(virt), flags);
     if (!pdpt)
         return -1;
     uint64_t *pd = table_ensure(pdpt, PDPT_INDEX(virt), flags);
@@ -78,13 +152,14 @@ int vmm_map_page(uintptr_t virt, uintptr_t phys, uint32_t flags)
         return -1;
 
     pt[PT_INDEX(virt)] = ((uint64_t)phys & ADDR_MASK) | flags | VMM_PAGE_PRESENT;
-    tlb_flush_page(virt);
+    if (as == current)
+        tlb_flush_page(virt);
     return 0;
 }
 
-void vmm_unmap_page(uintptr_t virt)
+void vmm_aspace_unmap(vmm_aspace_t *as, uintptr_t virt)
 {
-    uint64_t *pdpt = table_lookup(pml4, PML4_INDEX(virt));
+    uint64_t *pdpt = table_lookup(as->pml4, PML4_INDEX(virt));
     if (!pdpt)
         return;
     uint64_t *pd = table_lookup(pdpt, PDPT_INDEX(virt));
@@ -95,5 +170,16 @@ void vmm_unmap_page(uintptr_t virt)
         return;
 
     pt[PT_INDEX(virt)] = 0;
-    tlb_flush_page(virt);
+    if (as == current)
+        tlb_flush_page(virt);
+}
+
+int vmm_map_page(uintptr_t virt, uintptr_t phys, uint32_t flags)
+{
+    return vmm_aspace_map(current, virt, phys, flags);
+}
+
+void vmm_unmap_page(uintptr_t virt)
+{
+    vmm_aspace_unmap(current, virt);
 }
