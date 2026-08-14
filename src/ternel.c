@@ -13,6 +13,7 @@
 #include "tpmm.h"
 #include "tvmm.h"
 #include "tsec.h"
+#include "ttask.h"
 #include "tfs.h"
 #include "tsh.h"
 
@@ -208,6 +209,78 @@ static void cmd_scrub(int argc, char **argv)
     tprintf(" zeroed %u free frames (%u KiB)\n", n, n / 4);
 }
 
+/* Demo task: spin forever, logging progress and yielding to the scheduler. */
+static void demo_counter(void *arg)
+{
+    (void)arg;
+    uint64_t n = 0;
+    for (;;) {
+        n++;
+        if ((n & 0xFFFFF) == 0)
+            tlog("task %s: %u\n", current_task->name, (uint32_t)n);
+        if ((n & 0x3FFF) == 0)
+            ttask_yield();
+    }
+}
+
+static void cmd_tasks(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" id  name      state    prio  ticks\n");
+    for (int i = 0; i < TTASK_MAX_TASKS; i++) {
+        ttask_t *t = ttask_at(i);
+        if (!t || t->state == TTASK_FREE)
+            continue;
+        const char *st = t->state == TTASK_READY    ? "ready"
+                         : t->state == TTASK_RUNNING ? "run"
+                         : t->state == TTASK_EXITED  ? "done"
+                                                     : "?";
+        tprintf(" %-3d %-9s %-8s %-5u %-6u%s\n", i, t->name, st,
+                t->priority, t->ticks,
+                t == current_task ? "  <=" : "");
+    }
+}
+
+static void cmd_spawn(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: spawn <name>\n");
+        return;
+    }
+    ttask_t *t = ttask_create(argv[1], demo_counter, 0);
+    tprintf(" %s: %s\n", argv[1], t ? "spawned" : "FAILED (table full)");
+}
+
+static void cmd_burst(int argc, char **argv)
+{
+    unsigned n = 4;
+    if (argc > 1) {
+        n = 0;
+        for (char *p = argv[1]; *p >= '0' && *p <= '9'; p++)
+            n = n * 10 + (unsigned)(*p - '0');
+    }
+    if (n > 16)
+        n = 16;
+    int made = 0;
+    for (unsigned i = 0; i < n; i++) {
+        char name[TTASK_NAME_LEN];
+        tsprintf(name, sizeof name, "d%u", i);
+        if (ttask_create(name, demo_counter, 0))
+            made++;
+    }
+    tprintf(" spawned %d task%s\n", made, made == 1 ? "" : "s");
+}
+
+static void cmd_yield(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" yielding...\n");
+    ttask_yield();
+    tprintf(" back in shell\n");
+}
+
 /* ---- command interpreter --------------------------------------------- */
 
 static void cmd_help(int argc, char **argv);
@@ -229,6 +302,10 @@ static void cmd_halt(int argc, char **argv);
 static void cmd_reboot(int argc, char **argv);
 static void cmd_sec(int argc, char **argv);
 static void cmd_scrub(int argc, char **argv);
+static void cmd_tasks(int argc, char **argv);
+static void cmd_spawn(int argc, char **argv);
+static void cmd_burst(int argc, char **argv);
+static void cmd_yield(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
 static void cmd_cat(int argc, char **argv);
 static void cmd_mkdir(int argc, char **argv);
@@ -261,6 +338,10 @@ static const struct {
     { "reboot", cmd_reboot, "reboot via the keyboard controller (8042)" },
     { "sec",    cmd_sec,    "show + verify CPU hardening (NX, W^X, SMEP/SMAP)" },
     { "scrub",  cmd_scrub,  "zero every free physical frame (amnesia)" },
+    { "tasks",  cmd_tasks,  "list scheduler tasks" },
+    { "spawn",  cmd_spawn,  "spawn a demo task" },
+    { "burst",  cmd_burst,  "spawn N demo tasks" },
+    { "yield",  cmd_yield,  "yield the CPU to another task" },
     { "ls",     cmd_ls,     "list a directory (default /)" },
     { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
     { "mkdir",  cmd_mkdir,  "create a directory" },
@@ -631,6 +712,7 @@ void ternel_main(uintptr_t mbi)
     tfs_load_initrd(mbi);
     tsh_env_seed();
     sec_harden();
+    ttask_init();
 
     tlog("TraitOS v0.8.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
@@ -644,6 +726,8 @@ void ternel_main(uintptr_t mbi)
              : "off",
          sec_kernel_phys_base() ? "on" : "off",
          sec_stack_guard_enabled() ? "on" : "off");
+    tlog("scheduler: preemptive round-robin @ %u Hz, %d tasks\n",
+         (uint32_t)timer_hz(), ttask_count());
 
     tprintf("===============================================\n");
     tprintf(" TraitOS v0.8.0 - RAM-resident, amnesic OS\n");

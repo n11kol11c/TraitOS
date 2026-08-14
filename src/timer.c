@@ -1,6 +1,7 @@
 #include "timer.h"
 
 #include "idt.h"
+#include "ttask.h"
 
 #include <stdint.h>
 
@@ -9,6 +10,7 @@
 #define PIT_BASE_FREQ 1193182
 
 static volatile uint32_t tick_count = 0;
+static uint32_t hz = 0;
 
 static inline void outb(uint16_t port, uint8_t value)
 {
@@ -18,6 +20,7 @@ static inline void outb(uint16_t port, uint8_t value)
 static void timer_callback(registers_t *r)
 {
     (void)r;
+    ttask_tick();          /* preempt: pick the next task, maybe switch */
     tick_count++;
 }
 
@@ -30,10 +33,16 @@ void timer_init(uint32_t frequency_hz)
     outb(PIT_CHANNEL0, (uint8_t)(divisor & 0xFF));
     outb(PIT_CHANNEL0, (uint8_t)((divisor >> 8) & 0xFF));
 
+    hz = frequency_hz;
     irq_register(0, timer_callback);
 }
 
 uint32_t timer_ticks(void)
 {
     return tick_count;
+}
+
+uint32_t timer_hz(void)
+{
+    return hz;
 }
