@@ -62,6 +62,12 @@ RAM filesystem — all surfaced through an interactive TUI shell.
   scheduler with per-task stacks and CPU-time accounting. `spawn`/`burst`
   create tasks, `yield` hands over the CPU cooperatively, `tasks` lists
   everyone. IPC and user mode are next (M6b/M6c).
+- **Concurrency hardening (v0.9.1)** — the heap, the physical-memory bitmap,
+  and the VMM address-space API were audited for the new scheduler: PML4
+  slots 0 and 256..511 (the shared kernel view) can no longer be mapped or
+  unmapped from a user address space, and `tmalloc`/`tfree` plus the PMM
+  allocators run under an interrupt-critical section so preemption can't
+  tear their free lists apart.
 - **CPU hardening (M5)** — NX pages (EFER.NXE) with the heap/stack/data
   mapped non-executable, a W^X split of the kernel image (`.text` is
   read-only+executable, `.rodata` read-only, everything else NX), SMEP +
@@ -91,7 +97,7 @@ Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
 GRUB 2.06 ── "TraitOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.9.0 - RAM-resident, amnesic OS
+ TraitOS v0.9.1 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.

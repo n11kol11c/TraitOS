@@ -145,6 +145,10 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
       shell commands
 - [x] Task stacks from `tmalloc` (8 KiB each); exited slots are reused and
       their stacks freed
+- [x] Bug fixes (v0.9.1): shared kernel half of the page tables is guarded
+      against user-space mapping/unmapping (`tvmm.c`), and `tmalloc`/`tfree`
+      + the PMM bitmap allocators run under an IF-critical section so timer
+      preemption cannot corrupt them
 - [ ] Kernel stack guard pages *per task* (own stacks are on the heap now)
 - [ ] Scheduler priority tuning (e.g. idle boost, timeslice scaling)
 
