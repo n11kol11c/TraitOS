@@ -12,6 +12,7 @@
 #include "tstring.h"
 #include "tpmm.h"
 #include "tvmm.h"
+#include "tsec.h"
 #include "tfs.h"
 #include "tsh.h"
 
@@ -150,6 +151,7 @@ static void cmd_halt(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    tprintf(" scrubbing %u free frames...\n", (uint32_t)sec_scrub_ram());
     tprintf(" halting\n");
     __asm__ volatile("cli");
     for (;;)
@@ -160,12 +162,48 @@ static void cmd_reboot(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    tprintf(" scrubbing %u free frames...\n", (uint32_t)sec_scrub_ram());
     tprintf(" rebooting...\n");
     __asm__ volatile("cli");
     /* 8042 keyboard-controller system reset pulse */
     __asm__ volatile("outb %0, %1" : : "a"((uint8_t)0xFE), "Nd"((uint16_t)0x64));
     for (;;)
         __asm__ volatile("hlt");
+}
+
+static void cmd_sec(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    uint64_t efer = sec_read_efer();
+    uint64_t cr4 = sec_read_cr4();
+    uint64_t cr0 = sec_read_cr0();
+
+    tprintf(" EFER   : 0x%lx%s%s%s\n", (unsigned long)efer,
+            (efer & (1ull << 11)) ? " NXE" : "",
+            (efer & (1ull << 8)) ? " LME" : "",
+            (efer & (1ull << 9)) ? " LMA" : "");
+    tprintf(" CR4    : 0x%lx%s%s%s\n", (unsigned long)cr4,
+            (cr4 & (1ull << 5)) ? " PAE" : "",
+            (cr4 & (1ull << 20)) ? " SMEP" : "",
+            (cr4 & (1ull << 21)) ? " SMAP" : "");
+    tprintf(" CR0    : 0x%lx%s%s\n", (unsigned long)cr0,
+            (cr0 & (1ull << 0)) ? " PE" : "",
+            (cr0 & (1ull << 31)) ? " PG" : "");
+    uintptr_t base = sec_kernel_phys_base();
+    tprintf(" kaslr  : %s (image @ 0x%lx)\n", base ? "on" : "off",
+            (unsigned long)(base ? base : 0x100000));
+    tprintf(" W^X    : %s\n", sec_wx_enforced() ? "enforced" : "VIOLATED");
+    tprintf(" NX     : %s\n", sec_nx_enforced() ? "enforced" : "VIOLATED");
+    tprintf(" heap   : mapped non-executable\n");
+}
+
+static void cmd_scrub(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    uint32_t n = sec_scrub_ram();
+    tprintf(" zeroed %u free frames (%u KiB)\n", n, n / 4);
 }
 
 /* ---- command interpreter --------------------------------------------- */
@@ -187,6 +225,8 @@ static void cmd_set(int argc, char **argv);
 static void cmd_whoami(int argc, char **argv);
 static void cmd_halt(int argc, char **argv);
 static void cmd_reboot(int argc, char **argv);
+static void cmd_sec(int argc, char **argv);
+static void cmd_scrub(int argc, char **argv);
 static void cmd_ls(int argc, char **argv);
 static void cmd_cat(int argc, char **argv);
 static void cmd_mkdir(int argc, char **argv);
@@ -217,6 +257,8 @@ static const struct {
     { "whoami", cmd_whoami, "print the current user (from $USER)" },
     { "halt",   cmd_halt,   "halt the CPU (power-off not implemented)" },
     { "reboot", cmd_reboot, "reboot via the keyboard controller (8042)" },
+    { "sec",    cmd_sec,    "show + verify CPU hardening (NX, W^X, SMEP/SMAP)" },
+    { "scrub",  cmd_scrub,  "zero every free physical frame (amnesia)" },
     { "ls",     cmd_ls,     "list a directory (default /)" },
     { "cat",    cmd_cat,    "print a file (ramfs, procfs, sysfs)" },
     { "mkdir",  cmd_mkdir,  "create a directory" },
@@ -321,7 +363,7 @@ static void cmd_paging(int argc, char **argv)
     }
     uintptr_t virt = 0xFFFF800000000000ULL;
     tprintf(" frame @ 0x%x, mapping at 0xffff800000000000\n", (uint32_t)frame);
-    if (vmm_map_page(virt, frame, VMM_PAGE_WRITE) != 0) {
+    if (vmm_map_page(virt, frame, VMM_PAGE_WRITE | VMM_PAGE_NX) != 0) {
         tprintf(" map failed\n");
         tpmm_free(frame);
         return;
@@ -401,8 +443,8 @@ static void cmd_aspace(int argc, char **argv)
         return;
     }
 
-    vmm_aspace_map(a, addr, pa, VMM_PAGE_WRITE | VMM_PAGE_USER);
-    vmm_aspace_map(b, addr, pb, VMM_PAGE_WRITE | VMM_PAGE_USER);
+    vmm_aspace_map(a, addr, pa, VMM_PAGE_WRITE | VMM_PAGE_USER | VMM_PAGE_NX);
+    vmm_aspace_map(b, addr, pb, VMM_PAGE_WRITE | VMM_PAGE_USER | VMM_PAGE_NX);
     tprintf(" 2 address spaces, same virtual page mapped in both\n");
 
     vmm_aspace_switch(a);
@@ -570,12 +612,14 @@ void ternel_main(uintptr_t mbi)
     timer_init(100);
     teyboard_init();
     tpmm_init(mbi);
+    sec_kaslr_relocate(mbi);
     vmm_init();
     tfs_init();
     tfs_procfs_init();
     tfs_sysfs_init();
     tfs_load_initrd(mbi);
     tsh_env_seed();
+    sec_harden();
 
     tlog("TraitOS v0.7.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",

@@ -230,3 +230,29 @@ uint64_t tpmm_available_mem(void)
 {
     return (uint64_t)free_frames * PAGE_SIZE;
 }
+
+int tpmm_frame_used(uintptr_t phys)
+{
+    return bit_test((uint32_t)(phys / PAGE_SIZE));
+}
+
+void tpmm_reserve_range(uintptr_t base, size_t size)
+{
+    reserve_region(base, size);
+}
+
+void tpmm_release_range(uintptr_t base, size_t size)
+{
+    for (uintptr_t a = base & ~(uintptr_t)(PAGE_SIZE - 1);
+         a < base + size; a += PAGE_SIZE) {
+        uint32_t frame = (uint32_t)(a / PAGE_SIZE);
+        if (frame >= total_frames)
+            break;
+        if (bit_test(frame)) {
+            bit_clear(frame);
+            free_frames++;
+            if (frame < first_free_hint)
+                first_free_hint = frame;
+        }
+    }
+}

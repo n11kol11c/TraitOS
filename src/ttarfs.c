@@ -107,7 +107,7 @@ int tfs_load_initrd(uintptr_t mbi)
              * its pages into a scratch window before parsing. */
             for (size_t i = 0; i < pages; i++) {
                 if (vmm_map_page(INITRD_SCRATCH + i * 4096,
-                                 start + i * 4096, VMM_PAGE_WRITE) != 0) {
+                                 start + i * 4096, VMM_PAGE_WRITE | VMM_PAGE_NX) != 0) {
                     for (size_t j = 0; j < i; j++)
                         vmm_unmap_page(INITRD_SCRATCH + j * 4096);
                     return -1;

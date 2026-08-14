@@ -26,14 +26,20 @@ SECTIONS {
 
     .text ALIGN(4096) : AT(_boot_phys_end) {
         *(.text*)
+        . = ALIGN(4096);
+        _etext = .;
     }
 
     .rodata ALIGN(4096) : AT(ALIGN(LOADADDR(.text) + SIZEOF(.text), 4096)) {
         *(.rodata*)
+        . = ALIGN(4096);
+        _erodata = .;
     }
 
     .data ALIGN(4096) : AT(ALIGN(LOADADDR(.rodata) + SIZEOF(.rodata), 4096)) {
         *(.data*)
+        . = ALIGN(4096);
+        _edata = .;
     }
 
     .bss ALIGN(4096) : AT(ALIGN(LOADADDR(.data) + SIZEOF(.data), 4096)) {

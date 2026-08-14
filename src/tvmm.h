@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 
-#define VMM_PAGE_PRESENT (1u << 0)
-#define VMM_PAGE_WRITE   (1u << 1)
-#define VMM_PAGE_USER    (1u << 2)
+#define VMM_PAGE_PRESENT (1ull << 0)
+#define VMM_PAGE_WRITE   (1ull << 1)
+#define VMM_PAGE_USER    (1ull << 2)
+#define VMM_PAGE_NX      (1ull << 63)
 
 /* Higher-half physmap: boot.asm maps VIRT 0xFFFFFFFF80000000 + p onto
  * physical p for the whole first 1 GiB (2 MiB pages). */
@@ -28,11 +29,11 @@ void          vmm_aspace_destroy(vmm_aspace_t *as);
 void          vmm_aspace_switch(vmm_aspace_t *as);
 vmm_aspace_t *vmm_aspace_current(void);
 int           vmm_aspace_map(vmm_aspace_t *as, uintptr_t virt,
-                             uintptr_t phys, uint32_t flags);
+                             uintptr_t phys, uint64_t flags);
 void          vmm_aspace_unmap(vmm_aspace_t *as, uintptr_t virt);
 
 /* Map/unmap in the currently active address space. */
-int  vmm_map_page(uintptr_t virt, uintptr_t phys, uint32_t flags);
+int  vmm_map_page(uintptr_t virt, uintptr_t phys, uint64_t flags);
 void vmm_unmap_page(uintptr_t virt);
 
 #endif

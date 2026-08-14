@@ -14,4 +14,9 @@ uint32_t  tpmm_used_frames(void);
 uint64_t  tpmm_total_mem(void);
 uint64_t  tpmm_available_mem(void);
 
+/* Frame/region introspection for hardening + RAM scrubbing. */
+int  tpmm_frame_used(uintptr_t phys);
+void tpmm_reserve_range(uintptr_t base, size_t size);
+void tpmm_release_range(uintptr_t base, size_t size);
+
 #endif

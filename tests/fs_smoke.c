@@ -24,7 +24,7 @@ uint64_t tpmm_total_mem(void) { return 0; }
 uint64_t tpmm_available_mem(void) { return 0; }
 uint32_t tpmm_free_frames(void) { return 0; }
 uint32_t tpmm_used_frames(void) { return 0; }
-int vmm_map_page(uintptr_t v, uintptr_t p, uint32_t flags) { (void)v; (void)p; (void)flags; return 0; }
+int vmm_map_page(uintptr_t v, uintptr_t p, uint64_t flags) { (void)v; (void)p; (void)flags; return 0; }
 void vmm_unmap_page(uintptr_t v) { (void)v; }
 char _kernel_virtual_start[] = "";
 char _kernel_phys_start[] = "";

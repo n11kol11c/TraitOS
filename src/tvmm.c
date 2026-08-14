@@ -38,7 +38,7 @@ static void tlb_flush_page(uintptr_t virt)
 /* Fetch the child table of `table[index]`, allocating and wiring a fresh
  * frame if the slot is empty. Table frames always come from low memory so
  * they stay reachable through the physmap. */
-static uint64_t *table_ensure(uint64_t *table, unsigned index, uint32_t flags)
+static uint64_t *table_ensure(uint64_t *table, unsigned index, uint64_t flags)
 {
     uint64_t e = table[index];
     if (e & VMM_PAGE_PRESENT)
@@ -139,7 +139,7 @@ vmm_aspace_t *vmm_aspace_current(void)
 }
 
 int vmm_aspace_map(vmm_aspace_t *as, uintptr_t virt, uintptr_t phys,
-                   uint32_t flags)
+                   uint64_t flags)
 {
     uint64_t *pdpt = table_ensure(as->pml4, PML4_INDEX(virt), flags);
     if (!pdpt)
@@ -174,7 +174,7 @@ void vmm_aspace_unmap(vmm_aspace_t *as, uintptr_t virt)
         tlb_flush_page(virt);
 }
 
-int vmm_map_page(uintptr_t virt, uintptr_t phys, uint32_t flags)
+int vmm_map_page(uintptr_t virt, uintptr_t phys, uint64_t flags)
 {
     return vmm_aspace_map(current, virt, phys, flags);
 }

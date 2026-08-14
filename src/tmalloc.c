@@ -40,7 +40,7 @@ static void grow_heap(uint64_t need)
 
     for (size_t i = 0; i < pages; i++) {
         if (vmm_map_page(heap_virt + i * 4096, base + i * 4096,
-                         VMM_PAGE_WRITE) != 0) {
+                         VMM_PAGE_WRITE | VMM_PAGE_NX) != 0) {
             for (size_t j = 0; j < i; j++)
                 vmm_unmap_page(heap_virt + j * 4096);
             for (size_t j = 0; j < pages; j++)
