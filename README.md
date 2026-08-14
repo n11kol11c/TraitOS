@@ -38,8 +38,9 @@ own physical memory manager, paging, per-process address spaces, a heap, and a
 RAM filesystem — all surfaced through an interactive TUI shell.
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
-> M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), and M5 (security
-> hardening) are complete. See [Roadmap](#roadmap).
+> M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), M5 (security
+> hardening), and M6a (preemptive multitasking) are complete; M6 (IPC, user
+> mode) is next. See [Roadmap](#roadmap).
 
 ---
 
@@ -57,6 +58,10 @@ RAM filesystem — all surfaced through an interactive TUI shell.
 - **RAM filesystem** — GRUB loads an initrd as a Multiboot2 module; a ustar
   unpacker builds a ramfs VFS on boot (`tfs`), with `procfs` and `sysfs`
   virtual trees layered on top.
+- **Preemptive multitasking (M6a)** — a PIT-driven round-robin kernel
+  scheduler with per-task stacks and CPU-time accounting. `spawn`/`burst`
+  create tasks, `yield` hands over the CPU cooperatively, `tasks` lists
+  everyone. IPC and user mode are next (M6b/M6c).
 - **CPU hardening (M5)** — NX pages (EFER.NXE) with the heap/stack/data
   mapped non-executable, a W^X split of the kernel image (`.text` is
   read-only+executable, `.rodata` read-only, everything else NX), SMEP +
@@ -86,7 +91,7 @@ Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
 GRUB 2.06 ── "TraitOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.8.0 - RAM-resident, amnesic OS
+ TraitOS v0.9.0 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.
@@ -111,6 +116,10 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    reboot    reboot via the keyboard controller (8042)
    sec       show + verify CPU hardening (NX, W^X, SMEP/SMAP)
    scrub     zero every free physical frame (amnesia)
+   tasks     list scheduler tasks
+   spawn     spawn a demo task
+   burst     spawn N demo tasks
+   yield     yield the CPU to another task
    ls        list a directory (default /)
    cat       print a file (ramfs, procfs, sysfs)
    mkdir     create a directory
@@ -171,14 +180,25 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
  stack  : guarded
  heap   : mapped non-executable
 
-   > aspace
+    > aspace
  2 address spaces, same virtual page mapped in both
   in space A: wrote 0x11111111, read back 0x11111111
   in space B: wrote 0x22222222, read back 0x22222222
   in space A: still 0x11111111 (per-process isolation works)
  spaces torn down, frames returned
 
-   > uptime
+    > burst 3
+ spawned 3 tasks
+
+    > tasks
+  id  name      state    prio  ticks
+  0   idle      ready      0    1492
+  1   d0        ready      1    1207
+  2   d1        ready      1    1215
+  3   d2        ready      1    1203
+      (d0-d2 spin in the background; every preemption tick is visible here)
+
+    > uptime
  uptime: 12s (1247 ticks)
 ```
 
@@ -266,6 +286,7 @@ Key rules:
 | `boot/gdt.asm`               | Boot-time GDT (low) + `gdt_reload` (higher half)             |
 | `boot/isr_stubs.asm`         | 48 assembly interrupt entry stubs                            |
 | `src/ternel.c`               | Entry point, console printf, line editor, command table    |
+| `src/ttask.{c,h}`            | Preemptive round-robin scheduler (M6a)                     |
 | `src/tsh.{c,h}`              | Host-testable shell: env vars, tokenizer, history, `!n`    |
 | `src/tfs.{c,h}`              | Ramfs VFS: node tree, `mkdir -p`, `write`, rm, virtual nodes |
 | `src/ttarfs.c`               | ustar unpacker + Multiboot2 initrd module loader             |
@@ -275,7 +296,8 @@ Key rules:
 | `src/tpmm.{c,h}`             | Bitmap physical memory manager, first-fit + `_low`           |
 | `src/tmalloc.{c,h}`          | Kernel heap: first-fit free list + bump growth               |
 | `src/idt.{c,h}`              | IDT gates, PIC remap, IRQ dispatch, exception reports        |
-| `src/timer.{c,h}`            | PIT at 100 Hz, `timer_ticks()`                               |
+| `src/timer.{c,h}`            | PIT at 100 Hz, `timer_ticks()`, scheduler tick               |
+| `boot/task_switch.asm`       | Context switch (`ttask_switch_ctx`) + iretq entry trampoline |
 | `src/teyboard.{c,h}`         | PS/2 keyboard: set-1 scancodes, shift/caps, ring buffer      |
 | `src/vga.{c,h}`              | VGA text-mode driver (CP437 glyphs)                          |
 | `src/serial.{c,h}`           | COM1 UART + `tlog()` for serial logs                         |
@@ -337,17 +359,19 @@ ustar archive and tells GRUB to load it with a `module2` line in `grub.cfg`.
 ### Verify without an emulator
 
 `make smoke` compiles the filesystem modules (`tfs`, `ttarfs`, `tprocfs`,
-`tsysfs`) and the shell module (`tsh`) against the host libc with small stubs
-for kernel-only symbols, then runs three checks: it unpacks the real
-`boot/ramfs.img` and verifies the tree (walk, cat, `write`/`rm`/`mkdir -p`),
-it exercises the tokenizer (`"quotes"`, `\` escapes, `$VAR` expansion,
-`#` comments) plus history (`push`/dedupe/`!n`), and it verifies the M5
-security core — for every one of the 512 window pages, with and without a
-KASLR relocation, the same pure helper the kernel uses must produce
-W^X-correct PTEs (code RO+X, rodata RO, data NX, no page writable *and*
-executable). CI runs it on every push, so the RAM filesystem, shell, and
-security math are verified on your machine **and** in GitHub Actions with zero
-emulators involved.
+`tsysfs`), the shell module (`tsh`) and the scheduler core (`ttask_core.h`)
+against the host libc with small stubs for kernel-only symbols, then runs four
+checks: it unpacks the real `boot/ramfs.img` and verifies the tree (walk, cat,
+`write`/`rm`/`mkdir -p`), it exercises the tokenizer (`"quotes"`, `\` escapes,
+`$VAR` expansion, `#` comments) plus history (`push`/dedupe/`!n`), it verifies
+the M5 security core — for every one of the 512 window pages, with and without
+a KASLR relocation, the same pure helper the kernel uses must produce W^X
+correct PTEs (code RO+X, rodata RO, data NX, no page writable *and*
+executable) — and it checks the scheduler's round-robin/priority pick over
+every task-table state (empty, single, wrap-around, priorities, exited). CI
+runs it on every push, so the RAM filesystem, shell, security math, and
+scheduling math are verified on your machine **and** in GitHub Actions with
+zero emulators involved.
 
 ### Run in an emulator (optional)
 
@@ -419,6 +443,10 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `reboot`   | reboot via the 8042 keyboard controller                   |
 | `sec`      | show + verify CPU hardening (NX, W^X, SMEP/SMAP, KASLR, guard) |
 | `scrub`    | zero every free physical frame (amnesia)                  |
+| `tasks`    | list scheduler tasks (name, state, priority, CPU ticks)   |
+| `spawn`    | spawn a demo task                                         |
+| `burst`    | spawn N demo tasks (default 4)                            |
+| `yield`    | yield the CPU to another task                             |
 | `ls`       | list a directory (default `/`)                            |
 | `cat`      | print a file (ramfs, procfs, sysfs)                       |
 | `mkdir`    | create a directory (parents are created on demand)        |
@@ -439,7 +467,10 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M3** | Done | Shell: line editing, history + `!n`, quoting, `$VAR`, env, `reboot` |
 | **M4** | Done | RAM filesystem: initrd → ramfs VFS, procfs/sysfs, fs commands |
 | **M5** | Done | Hardening: NX, W^X, SMEP/SMAP, physical KASLR, RAM scrub |
-| **M6** | Later | Processes: scheduler, IPC, user mode + syscalls |
+| **M6a** | Done | Preemptive multitasking: round-robin scheduler, context switch, `tasks`/`spawn`/`burst`/`yield` |
+| **M6b** | Next | IPC between tasks (mailboxes/queues) |
+| **M6c** | Later | User mode: TSS, syscalls, user ELF loader |
+| **M7** | Later | Multitasking polish: priorities, scheduler tuning, perf counters |
 
 Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -448,7 +479,7 @@ Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 ## Project layout
 
 ```
-boot/                  boot-time assembly (boot.asm, gdt.asm, isr_stubs.asm)
+boot/                  boot-time assembly (boot.asm, gdt.asm, isr_stubs.asm, task_switch.asm)
 boot/ramfs.img         initrd, generated by `make` (ustar) — gitignored
 initrd/                root filesystem staging (tar'd into the initrd)
 src/                   kernel sources (flat, self-contained modules)
@@ -460,7 +491,9 @@ src/                   kernel sources (flat, self-contained modules)
   teyboard.{c,h}       PS/2 keyboard
   gdt.{c,h}            GDT reload glue
   idt.{c,h}            IDT + PIC remap, IRQ dispatch
-  timer.{c,h}          PIT timer
+  timer.{c,h}          PIT timer + scheduler tick
+  ttask.{c,h}          preemptive round-robin scheduler (M6a)
+  ttask_core.h         pure round-robin/priority pick math (host-tested)
   tmalloc.{c,h}        kernel heap
   tpmm.{c,h}           bitmap physical memory manager
   tvmm.{c,h}           paging + per-process address spaces

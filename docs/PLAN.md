@@ -128,9 +128,37 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [ ] Kernel KASLR via the GRUB `multiboot2` relocatable tag (later)
 
 ### M6 — Processes
-- Scheduler (round-robin + priority), preemption, IPC, user mode + syscalls
-- Memory isolation between processes (paging)
-- `user/` fills up with a shell and demo ELFs
+#### M6a — Preemptive multitasking (done)
+- [x] Kernel task table + states (`FREE/READY/RUNNING/EXITED`), idle task wraps
+      the boot/main context (`src/ttask.c`, `src/ttask.h`)
+- [x] Assembly context switch (`boot/task_switch.asm`): saves callee-saved
+      regs + rsp, restores the next task's, resumes via `ret`
+- [x] New tasks entered through a iretq frame (`ttask_entry_iret`): the
+      initial stack holds the saved block, a return address, and the iretq
+      frame; the C entry runs `fn(arg)` then `ttask_exit()`
+- [x] PIT-driven preemption: IRQ0 → `ttask_tick()` picks the next task and
+      switches mid-handler; PIC EOI is sent before dispatch so the PIC never
+      stays blocked across a switch (bug fix)
+- [x] Cooperative `ttask_yield()`, round-robin + priority pick (pure math in
+      `ttask_core.h`, host-tested by `make smoke`)
+- [x] CPU-time accounting (`ticks` per task) + `tasks`/`spawn`/`burst`/`yield`
+      shell commands
+- [x] Task stacks from `tmalloc` (8 KiB each); exited slots are reused and
+      their stacks freed
+- [ ] Kernel stack guard pages *per task* (own stacks are on the heap now)
+- [ ] Scheduler priority tuning (e.g. idle boost, timeslice scaling)
+
+#### M6b — IPC (next)
+- [ ] Mailbox/queue between tasks (`send`/`recv`), blocking with wakeup
+- [ ] Mutex/semaphore on top of the scheduler
+- [ ] Shell demo commands (`ipc`, `mutex`)
+
+#### M6c — User mode + syscalls (later)
+- [ ] TSS with ring-3 stacks; switch to user mode via `iretq`
+- [ ] `syscall`/`sysret` (or `int 0x80`) entry with a minimal syscall table
+- [ ] User ELF loader + `user/` programs (shell, demos)
+- [ ] Memory isolation between processes (paging); per-task address spaces
+- [ ] `user/` fills up with a shell and demo ELFs
 
 ## Security model (honest scoping)
 
