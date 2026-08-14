@@ -138,6 +138,29 @@ uintptr_t tpmm_alloc(void)
     return 0;
 }
 
+/* Low-memory (< 1 GiB) single frame: guaranteed reachable via the
+ * boot identity map and the higher-half physmap window. */
+uintptr_t tpmm_alloc_low(void)
+{
+    for (uint32_t f = first_free_hint; f < 0x40000 && f < total_frames; f++) {
+        if (!bit_test(f)) {
+            bit_set(f);
+            free_frames--;
+            first_free_hint = f + 1;
+            return (uintptr_t)f * PAGE_SIZE;
+        }
+    }
+    for (uint32_t f = 0; f < first_free_hint && f < 0x40000; f++) {
+        if (!bit_test(f)) {
+            bit_set(f);
+            free_frames--;
+            first_free_hint = f + 1;
+            return (uintptr_t)f * PAGE_SIZE;
+        }
+    }
+    return 0;
+}
+
 /* Allocate `pages` contiguous physical frames (for the heap). */
 uintptr_t tpmm_alloc_contig(size_t pages)
 {
