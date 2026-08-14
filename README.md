@@ -5,8 +5,9 @@ loads entirely into **RAM**, and never writes to persistent storage — power of
 and it is gone. Built with C and x86_64 assembly, boots via **GRUB2
 (Multiboot2)** on both **BIOS and UEFI**, and ships a **TUI** for now.
 
-> **Status:** early development — interactive console: IDT + PIC interrupts,
-> 100 Hz PIT timer, and PS/2 keyboard input.
+> **Status:** interactive console with a command line (`help`, `clear`,
+> `uptime`, `info`, `alloc`, `die`...) and M2 underway: Multiboot2 memory map
+> parsing + bitmap physical-frame allocator.
 > **Disclaimer:** educational project, *not* production security software.
 
 ## Goals

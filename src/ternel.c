@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #include "vga.h"
 #include "serial.h"
@@ -8,6 +9,8 @@
 #include "idt.h"
 #include "timer.h"
 #include "tmalloc.h"
+#include "tstring.h"
+#include "tpmm.h"
 
 /* Kernel console printf (KumOS-style, VGA only; use tlog() for serial). */
 static void tprintf(const char *fmt, ...)
@@ -56,7 +59,153 @@ static void tprintf(const char *fmt, ...)
     va_end(ap);
 }
 
-void ternel_main(void)
+/* ---- command interpreter --------------------------------------------- */
+
+static void cmd_help(int argc, char **argv);
+static void cmd_clear(int argc, char **argv);
+static void cmd_uptime(int argc, char **argv);
+static void cmd_ver(int argc, char **argv);
+static void cmd_info(int argc, char **argv);
+static void cmd_alloc(int argc, char **argv);
+static void cmd_echo(int argc, char **argv);
+static void cmd_die(int argc, char **argv);
+
+static const struct {
+    const char *name;
+    void (*fn)(int argc, char **argv);
+    const char *desc;
+} commands[] = {
+    { "help",   cmd_help,   "list available commands" },
+    { "clear",  cmd_clear,  "clear the screen" },
+    { "uptime", cmd_uptime, "seconds since boot" },
+    { "ver",    cmd_ver,    "kernel version" },
+    { "info",   cmd_info,   "system + memory info" },
+    { "alloc",  cmd_alloc,  "allocate and free 8 physical pages" },
+    { "echo",   cmd_echo,   "print the rest of the line" },
+    { "die",    cmd_die,    "divide by zero (panic demo)" },
+};
+
+#define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
+
+static void cmd_help(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" commands:\n");
+    for (size_t i = 0; i < NCOMMANDS; i++)
+        tprintf("   %-8s  %s\n", commands[i].name, commands[i].desc);
+}
+
+static void cmd_clear(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    vga_clear();
+}
+
+static void cmd_uptime(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" uptime: %us (%u ticks)\n", timer_ticks() / 100, timer_ticks());
+}
+
+static void cmd_ver(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" TraitOS v0.2.0 (x86_64, Multiboot2)\n");
+}
+
+static void cmd_info(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" arch      : x86_64\n");
+    tprintf(" boot      : GRUB2 / Multiboot2 (BIOS + UEFI)\n");
+    tprintf(" storage   : none - runs entirely from RAM\n");
+    tprintf(" memory    : %u MiB total, %u MiB available (%u KiB)\n",
+            (uint32_t)(tpmm_total_mem() >> 20),
+            (uint32_t)(tpmm_available_mem() >> 20),
+            (uint32_t)(tpmm_available_mem() >> 10) % 1024);
+    tprintf(" frames    : %u free / %u used\n",
+            tpmm_free_frames(), tpmm_used_frames());
+}
+
+static void cmd_alloc(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    uintptr_t pages[8];
+    tprintf(" allocating 8 frames:\n");
+    for (int i = 0; i < 8; i++) {
+        pages[i] = tpmm_alloc();
+        if (pages[i])
+            tprintf("   frame %d @ 0x%x\n", i, (uint32_t)pages[i]);
+        else
+            tprintf("   frame %d: FAILED\n", i);
+    }
+    for (int i = 0; i < 8; i++)
+        if (pages[i])
+            tpmm_free(pages[i]);
+    tprintf(" freed them again (%u frames free)\n", tpmm_free_frames());
+}
+
+static void cmd_echo(int argc, char **argv)
+{
+    for (int i = 1; i < argc; i++) {
+        if (i > 1)
+            tprintf(" ");
+        tprintf("%s", argv[i]);
+    }
+    tprintf("\n");
+}
+
+static void cmd_die(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    tprintf(" dividing by zero...\n");
+    volatile int x = 1;
+    tprintf(" result: %d\n", 5 / (x - 1));
+}
+
+static int tokenize(char *line, char **argv, int max)
+{
+    int argc = 0;
+    char *p = line;
+    while (*p && argc < max) {
+        while (*p == ' ')
+            p++;
+        if (!*p)
+            break;
+        argv[argc++] = p;
+        while (*p && *p != ' ')
+            p++;
+        if (*p)
+            *p++ = '\0';
+    }
+    return argc;
+}
+
+static void run_command(char *line)
+{
+    char *argv[8];
+    int argc = tokenize(line, argv, 8);
+    if (argc == 0)
+        return;
+    for (size_t i = 0; i < NCOMMANDS; i++) {
+        if (tstrcmp(argv[0], commands[i].name) == 0) {
+            commands[i].fn(argc, argv);
+            return;
+        }
+    }
+    tprintf(" unknown command '%s' (try 'help')\n", argv[0]);
+}
+
+/* ---- entry point ------------------------------------------------------- */
+
+void ternel_main(uintptr_t mbi)
 {
     char line[128];
     int line_len = 0;
@@ -70,19 +219,17 @@ void ternel_main(void)
     idt_init();
     timer_init(100);
     teyboard_init();
+    tpmm_init(mbi);
 
-    tlog("TraitOS v0.1.0 booted on x86_64\n");
-    tlog("interrupts: IDT + PIC, PIT @100Hz, PS/2 keyboard\n");
+    tlog("TraitOS v0.2.0 booted on x86_64\n");
+    tlog("memory map: %u MiB available (%u frames)\n",
+         (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
 
     tprintf("===============================================\n");
-    tprintf(" TraitOS v0.1.0 - RAM-resident, amnesic OS\n");
+    tprintf(" TraitOS v0.2.0 - RAM-resident, amnesic OS\n");
     tprintf("===============================================\n\n");
 
-    tprintf(" arch      : x86_64\n");
-    tprintf(" boot      : GRUB2 / Multiboot2 (BIOS + UEFI)\n");
-    tprintf(" storage   : none - runs entirely from RAM\n\n");
-
-    tprintf(" Type something and press Enter. Uptime logs to serial.\n");
+    tprintf(" Type 'help' for a list of commands.\n");
     tprintf("   > ");
 
     __asm__ volatile("sti");
@@ -100,8 +247,10 @@ void ternel_main(void)
         while ((c = teyboard_getchar()) >= 0) {
             if (c == '\n') {
                 vga_putchar('\n');
-                if (line_len > 0)
-                    tlog("input: %s\n", line);
+                if (line_len > 0) {
+                    tlog("cmd: %s\n", line);
+                    run_command(line);
+                }
                 line_len = 0;
                 line[0] = '\0';
                 vga_puts("   > ");

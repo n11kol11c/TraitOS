@@ -70,15 +70,16 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [ ] PIC→APIC, TSS/IST (double-fault stack), exception page-fault details
 
 ### M2 — Memory management
-- Parse Multiboot2 memory map and framebuffer info
-- Bitmap **PMM** with page alloc/free and poisoning on free
-- Higher-half kernel mapping; `vmm` with user/kernel page tables
-- Heap (`tmalloc`) on top of `vmm`
+- [x] Parse Multiboot2 memory map and framebuffer info
+- [x] Bitmap **PMM** with page alloc/free (`src/tpmm.c`), first-fit scan
+- [ ] Higher-half kernel mapping; `vmm` with user/kernel page tables
+- [ ] Heap (`tmalloc`) on top of `vmm`
 
 ### M3 — TUI shell
-- Input line editor (history, arrows), command parser
-- Commands: `help`, `about`, `meminfo`, `cpuinfo`, `clear`, `reboot`, `poweroff`
-- Framebuffer console with simple fonts (optional)
+- [x] Kernel command line: `help`, `clear`, `uptime`, `ver`, `info`, `alloc`,
+      `echo`, `die` (panic demo) — line editing + backspace in `src/ternel.c`
+- [ ] History, argv expansion, environment variables
+- [ ] Framebuffer console with simple fonts (optional)
 
 ### M4 — RAM filesystem
 - GRUB loads an `initrd`/rootfs image; unpack into **ramfs/tarfs**
