@@ -38,8 +38,8 @@ own physical memory manager, paging, per-process address spaces, a heap, and a
 RAM filesystem — all surfaced through an interactive TUI shell.
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
-> M2 (memory management), M3 (TUI shell), and M4 (RAM filesystem) are
-> complete. See [Roadmap](#roadmap).
+> M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), and M5 (security
+> hardening) are complete. See [Roadmap](#roadmap).
 
 ---
 
@@ -57,6 +57,12 @@ RAM filesystem — all surfaced through an interactive TUI shell.
 - **RAM filesystem** — GRUB loads an initrd as a Multiboot2 module; a ustar
   unpacker builds a ramfs VFS on boot (`tfs`), with `procfs` and `sysfs`
   virtual trees layered on top.
+- **CPU hardening (M5)** — NX pages (EFER.NXE) with the heap/stack/data
+  mapped non-executable, a W^X split of the kernel image (`.text` is
+  read-only+executable, `.rodata` read-only, everything else NX), SMEP +
+  SMAP in CR4, **physical KASLR** (the image relocates to a randomized 2 MiB
+  slot at boot), and RAM scrubbing on `halt`/`reboot` so nothing survives in
+  memory. `sec` verifies all of it at runtime.
 - **Interrupts & input** — IDT for 32 exceptions + 16 IRQs, PIC remap, 100 Hz
   PIT, PS/2 keyboard with shift/caps and a ring buffer.
 - **Interactive shell** — `help`, `info`, `alloc`, `paging`, `heap`, `aspace`,
@@ -79,7 +85,7 @@ Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
 GRUB 2.06 ── "TraitOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.7.0 - RAM-resident, amnesic OS
+ TraitOS v0.8.0 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.
@@ -102,6 +108,8 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    whoami    print the current user (from $USER)
    halt      halt the CPU (power-off not implemented)
    reboot    reboot via the keyboard controller (8042)
+   sec       show + verify CPU hardening (NX, W^X, SMEP/SMAP)
+   scrub     zero every free physical frame (amnesia)
    ls        list a directory (default /)
    cat       print a file (ramfs, procfs, sysfs)
    mkdir     create a directory
@@ -152,6 +160,15 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
    > whoami
  root
 
+   > sec
+ EFER   : 0xd01 NXE LME LMA
+ CR4    : 0x1006b0 PAE SMEP SMAP
+ CR0    : 0x80000013 PE PG
+ kaslr  : on (image @ 0x4000000)
+ W^X    : enforced
+ NX     : enforced
+ heap   : mapped non-executable
+
    > aspace
  2 address spaces, same virtual page mapped in both
   in space A: wrote 0x11111111, read back 0x11111111
@@ -164,8 +181,9 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
 ```
 
 `die` intentionally divides by zero — the IDT catches it, prints an exception
-report, and the machine halts. `halt` does the same without the fault, and
-`reboot` pulses the 8042 keyboard controller to restart the machine.
+report, and the machine halts. `halt` and `reboot` first scrub every free
+physical frame, so nothing is left behind in RAM; `reboot` then pulses the
+8042 keyboard controller to restart the machine.
 
 ---
 
@@ -318,12 +336,16 @@ ustar archive and tells GRUB to load it with a `module2` line in `grub.cfg`.
 
 `make smoke` compiles the filesystem modules (`tfs`, `ttarfs`, `tprocfs`,
 `tsysfs`) and the shell module (`tsh`) against the host libc with small stubs
-for kernel-only symbols, then runs two checks: it unpacks the real
+for kernel-only symbols, then runs three checks: it unpacks the real
 `boot/ramfs.img` and verifies the tree (walk, cat, `write`/`rm`/`mkdir -p`),
-and it exercises the tokenizer (`"quotes"`, `\` escapes, `$VAR` expansion,
-`#` comments) plus history (`push`/dedupe/`!n`). CI runs it on every push, so
-the RAM filesystem and shell are verified on your machine **and** in GitHub
-Actions with zero emulators involved.
+it exercises the tokenizer (`"quotes"`, `\` escapes, `$VAR` expansion,
+`#` comments) plus history (`push`/dedupe/`!n`), and it verifies the M5
+security core — for every one of the 512 window pages, with and without a
+KASLR relocation, the same pure helper the kernel uses must produce
+W^X-correct PTEs (code RO+X, rodata RO, data NX, no page writable *and*
+executable). CI runs it on every push, so the RAM filesystem, shell, and
+security math are verified on your machine **and** in GitHub Actions with zero
+emulators involved.
 
 ### Run in an emulator (optional)
 
@@ -393,6 +415,8 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `whoami`   | print the current user (from `$USER`)                     |
 | `halt`     | halt the CPU (power-off not implemented)                  |
 | `reboot`   | reboot via the 8042 keyboard controller                   |
+| `sec`      | show + verify CPU hardening (NX, W^X, SMEP/SMAP, KASLR)   |
+| `scrub`    | zero every free physical frame (amnesia)                  |
 | `ls`       | list a directory (default `/`)                            |
 | `cat`      | print a file (ramfs, procfs, sysfs)                       |
 | `mkdir`    | create a directory (parents are created on demand)        |
@@ -412,8 +436,8 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M2** | Done | Memory map, bitmap PMM, paging, heap, higher half, address spaces |
 | **M3** | Done | Shell: line editing, history + `!n`, quoting, `$VAR`, env, `reboot` |
 | **M4** | Done | RAM filesystem: initrd → ramfs VFS, procfs/sysfs, fs commands |
-| **M5** | Later  | Security hardening: NX, SMEP/SMAP, W^X, KASLR, RAM scrub |
-| **M6** | Later  | Processes: scheduler, IPC, user mode + syscalls |
+| **M5** | Done | Hardening: NX, W^X, SMEP/SMAP, physical KASLR, RAM scrub |
+| **M6** | Later | Processes: scheduler, IPC, user mode + syscalls |
 
 Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 
@@ -438,6 +462,8 @@ src/                   kernel sources (flat, self-contained modules)
   tmalloc.{c,h}        kernel heap
   tpmm.{c,h}           bitmap physical memory manager
   tvmm.{c,h}           paging + per-process address spaces
+  tsec.{c,h}           M5 hardening: NX, W^X, SMEP/SMAP, KASLR, scrub
+  tsec_core.h          pure W^X/KASLR PTE math (host-tested)
   tfs.{c,h}            ramfs VFS core
   ttarfs.c             ustar tar unpacker + initrd loader
   tprocfs.{c,h}        /proc virtual filesystem
@@ -455,11 +481,15 @@ build.sh               deps/build/iso/run/usb/clean wrapper
 ## Security posture (honest)
 
 TraitOS defends against **software** tampering and data persistence: no writes
-to the boot media, no swap, no dump, and (from M5) NX/SMEP/SMAP/W^X/KASLR.
+to the boot media, no swap, no dump, NX pages, SMEP/SMAP, a W^X kernel image,
+physical KASLR, and RAM scrubbing on shutdown so nothing survives in memory.
 
 It does **not** defend against cold-boot/RAM-dump attacks, hardware
 (evil-maid) tampering, or firmware compromise — because no pure-software OS can
-do that. See [`docs/PLAN.md`](docs/PLAN.md) for the full threat model.
+do that. Kernel-image *virtual* KASLR (randomizing the kernel's virtual base)
+is also not implemented: it needs position-independent code + relocations,
+deferred to the user-mode milestone. See [`docs/PLAN.md`](docs/PLAN.md) for the
+full threat model.
 
 > **Disclaimer:** this is an educational project, not production security
 > software. Do not store secrets on it.

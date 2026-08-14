@@ -109,10 +109,20 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [ ] Confirm: boot media never mounted writable
 
 ### M5 — Security hardening
-- NX, SMEP/SMAP, W^X, kernel KASLR (GRUB `multiboot2` relocatable tag)
-- No swap, no dump, no hibernation
-- Minimal, auditable syscall surface; capability-style checks
-- `shutdown` performs RAM scrubbing (best effort)
+- [x] NX pages: EFER.NXE + NX on the identity map, higher-half physmap,
+      kernel heap, initrd scratch and demo mappings (`tsec`)
+- [x] W^X kernel image: `.text` read-only+executable, `.rodata` read-only,
+      everything else non-executable — 4 KiB split of the physmap window,
+      pure PTE math in `tsec_core.h`, verified by `make smoke`
+- [x] SMEP + SMAP (CR4), enabled at boot, reported by `sec`
+- [x] Physical KASLR: image relocated to a randomized 2 MiB slot (RDTSC
+      entropy, initrd + used frames excluded); live page tables moved out of
+      the overridden window first; the original copy stays reserved
+- [x] RAM scrub on `halt`/`reboot` + `scrub` command (free frames < 1 GiB)
+- [ ] Kernel-image *virtual* KASLR (randomize the virtual base) — needs
+      `-fPIC` + relocations; deferred to the user-mode milestone
+- [ ] Stack guard pages / canaries
+- [ ] Kernel KASLR via the GRUB `multiboot2` relocatable tag (later)
 
 ### M6 — Processes
 - Scheduler (round-robin + priority), preemption, IPC, user mode + syscalls
@@ -125,7 +135,8 @@ TraitOS defends against **software** tampering and data persistence:
 
 - Nothing is written to the boot media after boot → no forensic trail on the
   stick; all ephemeral state lives in RAM.
-- Defense in depth: NX, SMEP/SMAP, W^X, ASLR, minimal attack surface.
+- Defense in depth: NX, SMEP/SMAP, W^X, physical KASLR, RAM scrub on
+  shutdown, minimal attack surface.
 
 TraitOS does **not** defend against:
 
