@@ -10,7 +10,7 @@ No disk writes. No forensic trail. Just you and the kernel.
 
 [![Build](https://github.com/n11kol11c/TrigerOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TrigerOS/actions/workflows/ci.yml)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.11.0-blueviolet)](https://github.com/n11kol11c/TrigerOS/releases)
+[![Version](https://img.shields.io/badge/version-v0.12.0-blueviolet)](https://github.com/n11kol11c/TrigerOS/releases)
 [![Platform](https://img.shields.io/badge/Platform-x86__64-blue.svg)]()
 [![Language](https://img.shields.io/badge/Language-C11%20+%20NASM-lightgrey.svg)]()
 [![Boot](https://img.shields.io/badge/Boot-GRUB2%20Multiboot2-green.svg)]()
@@ -57,8 +57,9 @@ RAM filesystem — all surfaced through an interactive TUI shell.
 
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
 > M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), M5 (security
-> hardening), M6a (preemptive multitasking), M6b (IPC), and M6c (user mode +
-> syscalls) are complete; M7 (scheduler polish) is next. See
+> hardening), M6a (preemptive multitasking), M6b (IPC), M6c (user mode +
+> syscalls), and M7 C1 (priority scheduling + idle boost) are complete;
+> M7 C2 (scheduler tuning + perf counters) is next. See
 > [Roadmap](#roadmap).
 
 ---
@@ -519,10 +520,11 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `reboot`   | reboot via the 8042 keyboard controller                   |
 | `sec`      | show + verify CPU hardening (NX, W^X, SMEP/SMAP, KASLR, guard) |
 | `scrub`    | zero every free physical frame (amnesia)                  |
-| `tasks`    | list scheduler tasks (name, state, priority, CPU ticks)   |
+| `tasks`    | list scheduler tasks (name, state, priority, timeslice, ticks) |
 | `spawn`    | spawn a demo task                                         |
 | `burst`    | spawn N demo tasks (default 4)                            |
 | `yield`    | yield the CPU to another task                             |
+| `priority` | get/set task priority (0=idle, 1=normal, 2=interactive, 3-7=urgent) |
 | `ipc`      | mailbox demo: writer/reader block on a shared queue       |
 | `mutex`    | mutex demo: 3 tasks share a protected counter             |
 | `run`      | run a user-mode program (`hello`, `spinner`)               |
@@ -549,7 +551,7 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M6a** | Done | Preemptive multitasking: round-robin scheduler, context switch, `tasks`/`spawn`/`burst`/`yield` |
 | **M6b** | Done | IPC: blocking mailboxes (`send`/`recv`), recursive mutex, `ipc`/`mutex` demos |
 | **M6c** | Done | User mode: TSS, `int 0x80` syscalls, user ELF loader, `run` command |
-| **M7** | Next | Multitasking polish: priorities, scheduler tuning, perf counters |
+| **M7** | In progress | Multitasking polish: M7 C1 priority scheduling + idle boost (done), M7 C2 perf counters (next) |
 
 Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 

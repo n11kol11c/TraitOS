@@ -151,7 +151,7 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
       + the PMM bitmap allocators run under an IF-critical section so timer
       preemption cannot corrupt them
 - [ ] Kernel stack guard pages *per task* (own stacks are on the heap now)
-- [ ] Scheduler priority tuning (e.g. idle boost, timeslice scaling)
+- [x] Scheduler priority tuning (e.g. idle boost, timeslice scaling)
 
 #### M6b — IPC (done, v0.10.0)
 - [x] Blocking state (`TTASK_BLOCKED`) + `ttask_block()`/`ttask_wake()`/
