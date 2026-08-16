@@ -202,7 +202,7 @@ void ttask_yield(void)
     if (!scheduler_ready)
         return;
     unsigned long flags;
-    __asm__ volatile("pushfq popq %0" : "=r"(flags));
+    __asm__ volatile("pushfq\n\tpopq %0" : "=r"(flags));
     __asm__ volatile("cli");
     ttask_pick_switch();
     if (flags & (1ul << 9))
@@ -224,7 +224,7 @@ void ttask_block(void)
     if (!scheduler_ready || !current_task)
         return;
     unsigned long flags;
-    __asm__ volatile("pushfq popq %0" : "=r"(flags));
+    __asm__ volatile("pushfq\n\tpopq %0" : "=r"(flags));
     __asm__ volatile("cli");
     current_task->state = TTASK_BLOCKED;
     ttask_t *next = ttask_pick_next();
