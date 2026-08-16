@@ -1,4 +1,4 @@
-; TraitOS user-mode program: "hello from user mode!"
+; TrigerOS user-mode program: "hello from user mode!"
 ; Assembled with nasm, linked at VMM_USER_BASE (0x8000000000).
 ;
 ; Syscall ABI (int 0x80): rax = number, rdi/rsi/rdx = args, rax = result.

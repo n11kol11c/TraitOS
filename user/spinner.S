@@ -1,4 +1,4 @@
-; TraitOS user-mode program: "spinner" - a live counter task
+; TrigerOS user-mode program: "spinner" - a live counter task
 ; Prints its pid and a running count, sleeping between lines. Running two of
 ; these (plus the kernel demos) shows ring-3 tasks preempted and scheduled
 ; side by side with kernel threads.

@@ -1,4 +1,4 @@
-/* TraitOS user-program linker script: everything lands in PML4 slot 1
+/* TrigerOS user-program linker script: everything lands in PML4 slot 1
  * (VMM_USER_BASE), so a single contiguous load at 0x8000000000 with no
  * stray header segment. `run` maps the PT_LOADs into a ring-3 aspace. */
 ENTRY(_start)

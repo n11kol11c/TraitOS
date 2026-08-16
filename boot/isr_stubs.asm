@@ -1,4 +1,4 @@
-; TraitOS — IDT/IRQ stubs (x86_64)
+; TrigerOS — IDT/IRQ stubs (x86_64)
 ; Mirrors KumOS's boot/isr_stubs.asm: one asm module providing every
 ; exception and IRQ vector entry, saving the full register context and
 ; dispatching to the C handlers in src/idt.c.

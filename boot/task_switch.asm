@@ -1,4 +1,4 @@
-; TraitOS — context switch primitives (M6a preemptive scheduler)
+; TrigerOS — context switch primitives (M6a preemptive scheduler)
 ;
 ; ttask_switch_ctx() saves the callee-saved registers + stack pointer of the
 ; current task into current_task->context, restores next_task->context, and

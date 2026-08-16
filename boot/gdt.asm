@@ -1,4 +1,4 @@
-; TraitOS — boot-time GDT + segment reload helper
+; TrigerOS — boot-time GDT + segment reload helper
 ; Mirrors KumOS's gdt_flush.asm: a separate asm module for GDT work.
 ;
 ; gdt64 / gdt64_ptr are linked LOW (.boot) because boot.asm executes an lgdt

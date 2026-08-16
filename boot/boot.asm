@@ -1,4 +1,4 @@
-; TraitOS — boot entry (x86_64, Multiboot2, higher-half kernel)
+; TrigerOS — boot entry (x86_64, Multiboot2, higher-half kernel)
 ; Mirrors KumOS's boot/ layout: boot.asm holds the entry + long-mode switch,
 ; gdt.asm holds the boot-time GDT.
 ;
