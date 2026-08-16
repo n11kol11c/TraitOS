@@ -1,23 +1,23 @@
 <div align="center">
  <img src="assets/traitos_light_t.png" alt="image not found." width="200" height="200" />
 
-# TraitOS
+# TrigerOS
 
 ### A from-scratch, RAM-resident x86_64 operating system
 
 Boots from a USB stick, loads entirely into RAM, and **vanishes on power-off**.
 No disk writes. No forensic trail. Just you and the kernel.
 
-[![Build](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TraitOS/actions/workflows/ci.yml)
+[![Build](https://github.com/n11kol11c/TrigerOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TrigerOS/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.11.0-blueviolet)](https://github.com/n11kol11c/TraitOS/releases)
+[![Version](https://img.shields.io/badge/version-v0.11.0-blueviolet)](https://github.com/n11kol11c/TrigerOS/releases)
 [![Platform](https://img.shields.io/badge/Platform-x86__64-blue.svg)]()
 [![Language](https://img.shields.io/badge/Language-C11%20+%20NASM-lightgrey.svg)]()
 [![Boot](https://img.shields.io/badge/Boot-GRUB2%20Multiboot2-green.svg)]()
 [![Memory](https://img.shields.io/badge/Memory-Higher--Half%20kernel-brightgreen.svg)]()
 [![RAM-resident](https://img.shields.io/badge/RAM--resident-Yes-brightgreen.svg)]()
 
-[![Milestone](https://img.shields.io/badge/milestone-M6c%20user%20mode-blue)](https://github.com/n11kol11c/TraitOS/blob/main/docs/PLAN.md)
+[![Milestone](https://img.shields.io/badge/milestone-M6c%20user%20mode-blue)](https://github.com/n11kol11c/TrigerOS/blob/main/docs/PLAN.md)
 [![Multitasking](https://img.shields.io/badge/multitasking-preemptive%20round--robin-orange)]()
 [![IPC](https://img.shields.io/badge/ipc-mailboxes%20%2B%20mutex-yellow)]()
 [![User mode](https://img.shields.io/badge/user%20mode-ring--3%20tasks%20%2B%20int%200x80-brightgreen)]()
@@ -30,9 +30,9 @@ No disk writes. No forensic trail. Just you and the kernel.
 
 ---
 
-## What is TraitOS?
+## What is TrigerOS?
 
-TraitOS is a hobby operating system written **from scratch** in C11 and x86_64
+TrigerOS is a hobby operating system written **from scratch** in C11 and x86_64
 assembly. It is built around one uncompromising idea: **nothing written back to
 the boot media, ever.**
 
@@ -115,20 +115,20 @@ RAM filesystem — all surfaced through an interactive TUI shell.
   arguments, `$VAR` expansion (`set`/`env`), `#` comments, plus
   `whoami`/`halt`/`reboot` and a `die` command that deliberately page-faults
   to show the exception path.
-- **CI on every push** — GitHub Actions builds `traitos.bin` + `traitos.iso`
+- **CI on every push** — GitHub Actions builds `trigeros.bin` + `trigeros.iso`
   and runs the QEMU-free host smoke tests.
 
 ---
 
 ## Usage showcase
 
-Booting `traitos.iso` in QEMU or on hardware drops you into a shell:
+Booting `trigeros.iso` in QEMU or on hardware drops you into a shell:
 
 ```
-GRUB 2.06 ── "TraitOS (RAM-resident)"
+GRUB 2.06 ── "TrigerOS (RAM-resident)"
 
 ===============================================
- TraitOS v0.10.0 - RAM-resident, amnesic OS
+ TrigerOS v0.10.0 - RAM-resident, amnesic OS
 ===============================================
 
  Type 'help' for a list of commands.
@@ -185,7 +185,7 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
  drw- 0  proc/
 
    > cat /etc/hostname
- hostname=traitos
+ hostname=trigeros
 
    > cat /proc/uptime
  uptime: 3 seconds (334 ticks)
@@ -204,7 +204,7 @@ GRUB 2.06 ── "TraitOS (RAM-resident)"
  root
 
    > echo "hello, $USER from $HOSTNAME"
- hello, root from traitos
+ hello, root from trigeros
 
    > !1
    > whoami
@@ -277,7 +277,7 @@ physical frame, so nothing is left behind in RAM; `reboot` then pulses the
 
 ### Boot flow
 
-Everything before the first line of C is assembly. TraitOS never uses a boot
+Everything before the first line of C is assembly. TrigerOS never uses a boot
 stub beyond what GRUB2 already provides.
 
 ```
@@ -285,7 +285,7 @@ stub beyond what GRUB2 already provides.
       │
       ▼
  ┌──────────────────────────────────────────────────────────────────┐
- │ GRUB2 reads the Multiboot2 header (first 8 KiB of traitos.bin),  │
+ │ GRUB2 reads the Multiboot2 header (first 8 KiB of trigeros.bin),  │
  │ loads every PT_LOAD segment at its physical address,             │
  │ zero-fills BSS, loads the initrd as a module, and jumps to the   │
  │ ELF entry point.                                                 │
@@ -369,7 +369,7 @@ Key rules:
 | `src/idt.{c,h}`              | IDT gates, PIC remap, IRQ dispatch, exception reports        |
 | `src/timer.{c,h}`            | PIT at 100 Hz, `timer_ticks()`, scheduler tick               |
 | `boot/task_switch.asm`       | Context switch (`ttask_switch_ctx`) + iretq entry trampoline |
-| `src/teyboard.{c,h}`         | PS/2 keyboard: set-1 scancodes, shift/caps, ring buffer      |
+| `src/keyboard.{c,h}`         | PS/2 keyboard: set-1 scancodes, shift/caps, ring buffer      |
 | `src/vga.{c,h}`              | VGA text-mode driver (CP437 glyphs)                          |
 | `src/serial.{c,h}`           | COM1 UART + `tlog()` for serial logs                         |
 | `src/gdt.{c,h}`              | Full GDT (kernel/user segments + TSS descriptor) + reload   |
@@ -409,18 +409,18 @@ Key rules:
 
 ```sh
 ./build.sh deps       # installs the toolchain for your OS (macOS/Linux)
-./build.sh all        # build kernel + bootable ISO → traitos.iso
+./build.sh all        # build kernel + bootable ISO → trigeros.iso
 ./build.sh smoke      # verify the filesystem host-side, no emulator needed
-./build.sh run        # optionally boot traitos.iso in QEMU (-serial stdio, 256M)
+./build.sh run        # optionally boot trigeros.iso in QEMU (-serial stdio, 256M)
 ```
 
-That is it. Thirty seconds later you are in the TraitOS shell.
+That is it. Thirty seconds later you are in the TrigerOS shell.
 
 ### Manual build
 
 ```sh
-make                 # just the kernel → traitos.bin
-make iso             # + initrd + bootable ISO → traitos.iso
+make                 # just the kernel → trigeros.bin
+make iso             # + initrd + bootable ISO → trigeros.iso
 make smoke           # host-side filesystem verification, no emulator
 ```
 
@@ -457,7 +457,7 @@ filesystem without one. If you have QEMU anyway:
 ```sh
 ./build.sh run
 # equivalent:
-qemu-system-x86_64 -cdrom traitos.iso -serial stdio -m 256M
+qemu-system-x86_64 -cdrom trigeros.iso -serial stdio -m 256M
 ```
 
 Add `-no-reboot` if you want to inspect the screen after `die`.
@@ -480,11 +480,11 @@ the bundled `x86_64-efi` modules.
 | Command                  | What it does                                        |
 | ------------------------ | --------------------------------------------------- |
 | `./build.sh deps`        | Install the toolchain (Homebrew / apt / dnf / pacman) |
-| `./build.sh build`       | Build `traitos.bin`                                 |
-| `./build.sh iso`         | Build `traitos.bin` + `traitos.iso`                 |
+| `./build.sh build`       | Build `trigeros.bin`                                 |
+| `./build.sh iso`         | Build `trigeros.bin` + `trigeros.iso`                 |
 | `./build.sh smoke`       | Run the host-side filesystem smoke test (no emulator) |
 | `./build.sh run`         | Build and boot in QEMU (optional)                   |
-| `./build.sh usb [dev]`   | Write `traitos.iso` to a USB stick (erases it)      |
+| `./build.sh usb [dev]`   | Write `trigeros.iso` to a USB stick (erases it)      |
 | `./build.sh clean`       | Remove build artifacts                              |
 | `./build.sh all`         | Default: build kernel + ISO                         |
 
@@ -492,7 +492,7 @@ the bundled `x86_64-efi` modules.
 
 Pushing to GitHub triggers the `build` workflow (`.github/workflows/ci.yml`):
 it installs nasm/lld/grub tooling on Ubuntu, runs `make all`, runs `make iso`,
-runs the filesystem smoke test (`make smoke`), and uploads `traitos.iso` as an
+runs the filesystem smoke test (`make smoke`), and uploads `trigeros.iso` as an
 artifact. If the badge at the top is green, the latest push builds clean and
 the RAM filesystem is verified — no emulator anywhere in the pipeline.
 
@@ -567,7 +567,7 @@ src/                   kernel sources (flat, self-contained modules)
   tsh.{c,h}            shell: env vars, tokenizer, history + !n (host-tested)
   vga.{c,h}            VGA text-mode driver
   serial.{c,h}         COM1 UART + tlog()
-  teyboard.{c,h}       PS/2 keyboard
+  keyboard.{c,h}       PS/2 keyboard
   gdt.{c,h}            GDT reload glue
   idt.{c,h}            IDT + PIC remap, IRQ dispatch
   timer.{c,h}          PIT timer + scheduler tick
@@ -600,7 +600,7 @@ build.sh               deps/build/iso/run/usb/clean wrapper
 
 ## Security posture (honest)
 
-TraitOS defends against **software** tampering and data persistence: no writes
+TrigerOS defends against **software** tampering and data persistence: no writes
 to the boot media, no swap, no dump, NX pages, SMEP/SMAP, a W^X kernel image,
 physical KASLR, a stack guard page, and RAM scrubbing on shutdown so nothing
 survives in memory.
@@ -618,6 +618,6 @@ threat model.
 ## License
 
 [MIT](LICENSE). Project structure and conventions modeled after
-[KumOS](https://github.com/todorw/KumOS) (GPL-3.0) by a friend — TraitOS is
+[KumOS](https://github.com/todorw/KumOS) (GPL-3.0) by a friend — TrigerOS is
 x86_64, all source is original, and is licensed MIT.
 
