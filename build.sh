@@ -9,7 +9,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 err()  { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
 echo -e "${CYAN}"
-echo "   ████████╗██████╗  █████╗ ██╗████████╗ ██████╗ ███████╗"
+echo "   ████████╗███████╗ █████╗ ██╗████████╗ ██████╗ ███████╗"
 echo "   ╚══██╔══╝██╔══██╗██╔══██╗██║╚══██╔══╝██╔═══██╗██╔════╝"
 echo "      ██║   ██████╔╝███████║██║   ██║   ██║   ██║███████╗"
 echo "      ██║   ██╔══██╗██╔══██║██║   ██║   ██║   ██║╚════██║"
@@ -67,8 +67,8 @@ run_qemu() {
     if ! command -v qemu-system-x86_64 &>/dev/null; then
         err "qemu-system-x86_64 not found. Install QEMU (macOS: brew install qemu)."
     fi
-    info "Launching TraitOS in QEMU..."
-    qemu-system-x86_64 -cdrom traitos.iso -serial stdio -m 256M -no-reboot
+    info "Launching TrigerOS in QEMU..."
+    qemu-system-x86_64 -cdrom trigeros.iso -serial stdio -m 256M -no-reboot
 }
 
 write_usb() {
@@ -87,15 +87,15 @@ write_usb() {
     read -r confirm
     [ "$confirm" = "yes" ] || { warn "Aborted."; return; }
     make iso
-    log "Writing traitos.iso to $dev ..."
+    log "Writing trigeros.iso to $dev ..."
     if [ "$OS" = "Darwin" ]; then
         local base
         base="$(basename "$dev")"
         [[ "$base" == rdisk* ]] || base="r$base"
         diskutil unmountDisk "$dev" 2>/dev/null || true
-        sudo dd if=traitos.iso of="/dev/$base" bs=1m
+        sudo dd if=trigeros.iso of="/dev/$base" bs=1m
     else
-        sudo dd if=traitos.iso of="$dev" bs=4M status=progress oflag=sync
+        sudo dd if=trigeros.iso of="$dev" bs=4M status=progress oflag=sync
     fi
     log "Done! You can now boot from $dev"
 }
@@ -117,13 +117,13 @@ case "${1:-all}" in
         build && make_iso
         echo ""
         echo -e "${GREEN}╔═══════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║      TraitOS built successfully!      ║${NC}"
+        echo -e "${GREEN}║      TrigerOS built successfully!      ║${NC}"
         echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
         echo ""
         echo -e "  ${YELLOW}Verify (no emulator):${NC} ./build.sh smoke"
         echo -e "  ${YELLOW}Run in QEMU:${NC}  ./build.sh run"
         echo -e "  ${YELLOW}Write to USB:${NC} ./build.sh usb /dev/diskX"
-        echo -e "  ${YELLOW}ISO file:${NC}     $(pwd)/traitos.iso"
+        echo -e "  ${YELLOW}ISO file:${NC}     $(pwd)/trigeros.iso"
         echo ""
         ;;
     *)

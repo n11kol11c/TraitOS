@@ -1,8 +1,8 @@
-# TraitOS build system (KumOS-style)
+# TrigerOS build system (KumOS-style)
 # Requires: clang (freestanding cross-target), lld, nasm, GNU make
 # Optional (for `make iso`): xorriso + grub-mkrescue
 
-all: traitos.bin
+all: trigeros.bin
 
 CC       = clang
 TARGET   = x86_64-none-elf
@@ -31,7 +31,7 @@ GRUB_MKR = $(shell command -v x86_64-elf-grub-mkrescue 2>/dev/null || command -v
 KERN_OBJS = \
     boot/boot.o boot/gdt.o boot/isr_stubs.o boot/task_switch.o \
     src/tstring.o src/vga.o src/serial.o \
-    src/teyboard.o src/gdt.o src/tss.o src/idt.o src/timer.o src/tmalloc.o src/tpmm.o src/tvmm.o \
+    src/keyboard.o src/gdt.o src/tss.o src/idt.o src/timer.o src/tmalloc.o src/tpmm.o src/tvmm.o \
     src/tsec.o \
     src/tsys.o \
     src/telf.o \
@@ -63,7 +63,7 @@ boot/%.o: boot/%.asm
 src/%.o: src/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-traitos.bin: $(KERN_OBJS) linker.ld
+trigeros.bin: $(KERN_OBJS) linker.ld
 	$(LD) $(LDFLAGS) $(KERN_OBJS) -o $@
 	@echo "Kernel: $$(ls -lh $@ | awk '{print $$5}')"
 
@@ -76,15 +76,15 @@ $(RAMFS_IMG): $(shell find initrd -type f 2>/dev/null)
 
 user-programs: $(USER_PROGS)
 
-iso: traitos.bin $(RAMFS_IMG)
+iso: trigeros.bin $(RAMFS_IMG)
 	@mkdir -p iso/boot/grub
-	@cp traitos.bin iso/boot/traitos.bin && cp grub.cfg iso/boot/grub/grub.cfg
+	@cp trigeros.bin iso/boot/trigeros.bin && cp grub.cfg iso/boot/grub/grub.cfg
 	@cp $(RAMFS_IMG) iso/boot/ramfs.img
-	@$(GRUB_MKR) -o traitos.iso iso/
-	@echo "ISO: $$(ls -lh traitos.iso | awk '{print $$5}')"
+	@$(GRUB_MKR) -o trigeros.iso iso/
+	@echo "ISO: $$(ls -lh trigeros.iso | awk '{print $$5}')"
 
 run: iso
-	qemu-system-x86_64 -cdrom traitos.iso -serial stdio -m 256M
+	qemu-system-x86_64 -cdrom trigeros.iso -serial stdio -m 256M
 
 HOST_CC ?= cc
 
@@ -112,7 +112,7 @@ smoke: $(RAMFS_IMG)
 
 clean:
 	@rm -rf build
-	@rm -f $(KERN_OBJS) traitos.bin traitos.iso $(RAMFS_IMG)
+	@rm -f $(KERN_OBJS) trigeros.bin trigeros.iso $(RAMFS_IMG)
 	@rm -f user/hello.o user/hello.elf user/spinner.o user/spinner.elf
 
 .PHONY: all iso run smoke clean user-programs

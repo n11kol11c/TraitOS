@@ -29,5 +29,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: traitos.iso
-          path: traitos.iso
+          name: trigeros.iso
+          path: trigeros.iso

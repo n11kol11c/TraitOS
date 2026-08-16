@@ -1,4 +1,4 @@
-/* TraitOS Kernel Linker Script */
+/* TrigerOS Kernel Linker Script */
 ENTRY(_start)
 
 PHYS_BASE = 0x100000;
