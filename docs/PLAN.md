@@ -1,8 +1,8 @@
-# TraitOS — Development Plan
+# TrigerOS — Development Plan
 
 ## Vision
 
-TraitOS is a privacy- and security-oriented operating system that **runs
+TrigerOS is a privacy- and security-oriented operating system that **runs
 entirely from RAM**:
 
 - Boots from a USB stick (or ISO) using GRUB2.
@@ -35,8 +35,8 @@ The project layout, build scripts, and module conventions mirror
 [KumOS](https://github.com/todorw/KumOS) (GPL-3.0): a flat `src/` of
 self-contained `.c/.h` modules, `boot/` assembly, top-level
 `linker.ld`/`grub.cfg`/`build.sh`, and a `user/` userspace directory.
-KumOS is 32-bit (Multiboot1); TraitOS is x86_64 (Multiboot2), so the boot
-chain is written from scratch. TraitOS source is original MIT code — the
+KumOS is 32-bit (Multiboot1); TrigerOS is x86_64 (Multiboot2), so the boot
+chain is written from scratch. TrigerOS source is original MIT code — the
 KumOS API shapes and conventions are adapted, not copied verbatim.
 
 ## Directory map (current)
@@ -45,7 +45,7 @@ KumOS API shapes and conventions are adapted, not copied verbatim.
 boot/                    boot assembly (boot.asm, gdt.asm), ramfs.img initrd
 src/                     flat kernel modules
   ternel.c, tstring.*, vga.*, serial.*
-  teyboard.*, gdt.*, idt.*, timer.*, tmalloc.*, tpmm.*, tvmm.*
+  keyboard.*, gdt.*, idt.*, timer.*, tmalloc.*, tpmm.*, tvmm.*
   tfs.*, ttarfs.*, tprocfs.*, tsysfs.*, tsh.*    (filesystem + shell core)
   tsys.* (syscalls), telf.* (user ELF loader), tss.* (ring-3 stacks)
 initrd/                  root filesystem staging (tar'd into boot/ramfs.img)
@@ -190,14 +190,14 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 
 ## Security model (honest scoping)
 
-TraitOS defends against **software** tampering and data persistence:
+TrigerOS defends against **software** tampering and data persistence:
 
 - Nothing is written to the boot media after boot → no forensic trail on the
   stick; all ephemeral state lives in RAM.
 - Defense in depth: NX, SMEP/SMAP, W^X, physical KASLR, RAM scrub on
   shutdown, minimal attack surface.
 
-TraitOS does **not** defend against:
+TrigerOS does **not** defend against:
 
 - **Cold-boot / RAM-dump attacks** (memory persists after power loss for a
   while, especially with DRAM remanence).
@@ -225,7 +225,7 @@ nasm -f elf64
 
 ## Testing
 
-- CI builds `traitos.bin` + `traitos.iso` on every push, then runs the
+- CI builds `trigeros.bin` + `trigeros.iso` on every push, then runs the
   host-side filesystem smoke test (`make smoke`).
 - Host-side smoke test (`tests/fs_smoke.c`, `make smoke`) compiles the fs
   modules against the host libc with stubs for kernel-only symbols, unpacks

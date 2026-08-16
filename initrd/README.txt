@@ -1,1 +1,1 @@
-TraitOS root filesystem, served from the initrd ramfs.
+TrigerOS root filesystem, served from the initrd ramfs.

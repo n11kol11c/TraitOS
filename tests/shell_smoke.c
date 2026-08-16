@@ -53,7 +53,7 @@ int main(void)
         check("multi[1]", argv[1], "/");
         check("multi[2]", argv[2], "/");
         check("multi[3]", argv[3], "");
-        check("multi[4]", argv[4], "traitos");
+        check("multi[4]", argv[4], "trigeros");
     }
 
     strcpy(line, "echo a\\ b \"c\\\"d\"");
@@ -69,7 +69,7 @@ int main(void)
     check("dollar argc", argc == 4 ? "4" : "?", "4");
     if (argc >= 4) {
         check("dollar[1]", argv[1], "$HOME");
-        check("dollar[3]", argv[3], "traitos");
+        check("dollar[3]", argv[3], "trigeros");
     }
 
     strcpy(line, "  echo\tspaced   args  ");
@@ -120,9 +120,9 @@ int main(void)
     check("expand plain", tsh_hist_expand("echo hi", hbuf, sizeof hbuf) == 0 ? "0" : "?",
           "0");
 
-    tsh_env_set("NAME", "traitos");
+    tsh_env_set("NAME", "trigeros");
     check("env_get", tsh_env_get("NAME") ? tsh_env_get("NAME") : "(null)",
-          "traitos");
+          "trigeros");
     check("env_get missing", tsh_env_get("NOPE") ? "set" : "(null)", "(null)");
 
     printf("\n%s (%d/%d passed)\n",

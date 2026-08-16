@@ -121,17 +121,17 @@ int main(void)
     cat("/sys/kernel");
 
     printf("\n-- write test --\n");
-    tfs_node_t *f2 = tfs_touch("/etc/traitos.conf");
-    expect("/etc/traitos.conf", "touch", f2 != NULL);
+    tfs_node_t *f2 = tfs_touch("/etc/trigeros.conf");
+    expect("/etc/trigeros.conf", "touch", f2 != NULL);
     const char *payload = "key=value\nhello=world\n";
-    expect("/etc/traitos.conf", "write",
+    expect("/etc/trigeros.conf", "write",
            f2 != NULL && tfs_write(f2, payload, strlen(payload)) == 0);
-    cat("/etc/traitos.conf");
+    cat("/etc/trigeros.conf");
 
     printf("\n-- rm test --\n");
-    tfs_node_t *rmf = tfs_lookup("/etc/traitos.conf");
-    expect("/etc/traitos.conf", "rm", tfs_rm(rmf) == 0);
-    expect("/etc/traitos.conf", "rm removed", tfs_lookup("/etc/traitos.conf") == NULL);
+    tfs_node_t *rmf = tfs_lookup("/etc/trigeros.conf");
+    expect("/etc/trigeros.conf", "rm", tfs_rm(rmf) == 0);
+    expect("/etc/trigeros.conf", "rm removed", tfs_lookup("/etc/trigeros.conf") == NULL);
     cat("/etc/hostname");
 
     printf("\n-- deep mkdir -p --\n");
