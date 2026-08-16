@@ -139,7 +139,7 @@ void tlog(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    serial_puts(COM1, "[traitos] ");
+    serial_puts(COM1, "[trigeros] ");
     serial_vprintf(COM1, fmt, ap);
     va_end(ap);
 }

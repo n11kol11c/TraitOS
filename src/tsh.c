@@ -35,8 +35,8 @@ const char *tsh_env_get(const char *key)
 
 void tsh_env_seed(void)
 {
-    tsh_env_set("OS", "traitos");
-    tsh_env_set("HOSTNAME", "traitos");
+    tsh_env_set("OS", "trigeros");
+    tsh_env_set("HOSTNAME", "trigeros");
     tsh_env_set("USER", "root");
     tsh_env_set("HOME", "/");
 }
