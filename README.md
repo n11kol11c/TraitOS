@@ -1,5 +1,5 @@
 <div align="center">
- <img src="assets/traitos_light_t.png" alt="image not found." width="200" height="200" />
+ <img src="assets/trigeros_light_t.png" alt="image not found." width="200" height="200" />
 
 # TrigerOS
 
