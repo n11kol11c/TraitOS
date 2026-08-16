@@ -9,7 +9,7 @@ Boots from a USB stick, loads entirely into RAM, and **vanishes on power-off**.
 No disk writes. No forensic trail. Just you and the kernel.
 
 [![Build](https://github.com/n11kol11c/TrigerOS/actions/workflows/ci.yml/badge.svg)](https://github.com/n11kol11c/TrigerOS/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v0.11.0-blueviolet)](https://github.com/n11kol11c/TrigerOS/releases)
 [![Platform](https://img.shields.io/badge/Platform-x86__64-blue.svg)]()
 [![Language](https://img.shields.io/badge/Language-C11%20+%20NASM-lightgrey.svg)]()
@@ -617,7 +617,7 @@ threat model.
 
 ## License
 
-[MIT](LICENSE). Project structure and conventions modeled after
+[BSD-3-Clause](LICENSE). Project structure and conventions modeled after
 [KumOS](https://github.com/todorw/KumOS) (GPL-3.0) by a friend — TrigerOS is
-x86_64, all source is original, and is licensed MIT.
+x86_64, all source is original, and is licensed BSD-3-Clause.
 

@@ -36,7 +36,7 @@ The project layout, build scripts, and module conventions mirror
 self-contained `.c/.h` modules, `boot/` assembly, top-level
 `linker.ld`/`grub.cfg`/`build.sh`, and a `user/` userspace directory.
 KumOS is 32-bit (Multiboot1); TrigerOS is x86_64 (Multiboot2), so the boot
-chain is written from scratch. TrigerOS source is original MIT code — the
+chain is written from scratch. TrigerOS source is original BSD-3-Clause code — the
 KumOS API shapes and conventions are adapted, not copied verbatim.
 
 ## Directory map (current)
