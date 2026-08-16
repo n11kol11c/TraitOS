@@ -24,8 +24,9 @@ static void ttask_entry(void);
 static void ttask_free_resources(ttask_t *t);
 
 /* Select the next task: round-robin scan starting after the current task,
- * preferring higher priority. Falls back to the current task when nothing
- * else is ready. */
+ * preferring higher priority. When the current task's timeslice has run out
+ * it is treated as not runnable, so the CPU moves on instead of re-picking
+ * it; the scan falls back to it only if nothing else is ready. */
 static ttask_t *ttask_pick_next(void)
 {
     uint8_t state[TTASK_MAX_TASKS], prio[TTASK_MAX_TASKS];
@@ -33,8 +34,9 @@ static ttask_t *ttask_pick_next(void)
         state[i] = tasks[i].state;
         prio[i] = tasks[i].priority;
     }
-    int idx = ttask_pick_index((int)(current_task - tasks), state, prio,
-                               TTASK_MAX_TASKS);
+    int cur = (int)(current_task - tasks);
+    int idx = ttask_pick_index_ex(cur, state, prio, TTASK_MAX_TASKS,
+                                  current_task->slice == 0 ? cur : -1);
     return idx >= 0 ? &tasks[idx] : current_task;
 }
 
@@ -42,6 +44,7 @@ static void ttask_pick_switch(void)
 {
     ttask_t *next = ttask_pick_next();
     if (next && next != current_task) {
+        next->slice = ttask_slice_ticks(next->priority);
         /* ring-3 transitions land on this task's kernel stack (TSS rsp0) */
         tss_set_rsp0(next->stack ? (uint64_t)next->stack + next->stack_size
                                  : (uintptr_t)&stack_top);
@@ -65,6 +68,7 @@ void ttask_init(void)
     tstrncpy(idle->name, "idle", sizeof idle->name - 1);
     idle->state = TTASK_READY;
     idle->priority = 0;
+    idle->slice = 0;              /* never preempted away on its own */
     idle->context = 0;            /* captured on the first switch away */
     current_task = idle;
     scheduler_ready = 1;
@@ -134,6 +138,7 @@ ttask_t *ttask_create(const char *name, ttask_fn_t fn, void *arg)
     tstrncpy(t->name, name, sizeof t->name - 1);
     t->state = TTASK_READY;
     t->priority = 1;
+    t->slice = ttask_slice_ticks(t->priority);
     t->fn = fn;
     t->arg = arg;
     t->stack = tmalloc(TTASK_STACK_SIZE);
@@ -168,7 +173,8 @@ ttask_t *ttask_create_user(const char *name, uintptr_t entry,
     tmemset(t, 0, sizeof *t);
     tstrncpy(t->name, name, sizeof t->name - 1);
     t->state = TTASK_READY;
-    t->priority = 1;
+    t->priority = 2;             /* interactive: user programs get a longer slice */
+    t->slice = ttask_slice_ticks(t->priority);
     t->fn = (ttask_fn_t)entry;       /* stored, never called as a C fn */
     t->stack = tmalloc(TTASK_STACK_SIZE);
     if (!t->stack) {
@@ -196,7 +202,7 @@ void ttask_yield(void)
     if (!scheduler_ready)
         return;
     unsigned long flags;
-    __asm__ volatile("pushfq; popq %0" : "=r"(flags));
+    __asm__ volatile("pushfq popq %0" : "=r"(flags));
     __asm__ volatile("cli");
     ttask_pick_switch();
     if (flags & (1ul << 9))
@@ -218,7 +224,7 @@ void ttask_block(void)
     if (!scheduler_ready || !current_task)
         return;
     unsigned long flags;
-    __asm__ volatile("pushfq; popq %0" : "=r"(flags));
+    __asm__ volatile("pushfq popq %0" : "=r"(flags));
     __asm__ volatile("cli");
     current_task->state = TTASK_BLOCKED;
     ttask_t *next = ttask_pick_next();
@@ -259,6 +265,8 @@ void ttask_tick(void)
     if (!scheduler_ready)
         return;
     current_task->ticks++;
+    if (current_task->slice > 0)
+        current_task->slice--;
     ttask_pick_switch();
 }
 

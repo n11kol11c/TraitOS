@@ -30,6 +30,7 @@ typedef struct ttask {
     uint8_t    state;
     uint8_t    priority;
     uint32_t   ticks;        /* CPU time consumed (PIT ticks) */
+    uint32_t   slice;        /* ticks left in the current timeslice */
     ttask_fn_t fn;           /* entry function (runs once) */
     void      *arg;
     void      *stack;        /* tmalloc'd kernel stack; TSS rsp0 target */
