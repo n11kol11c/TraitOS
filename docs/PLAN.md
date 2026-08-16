@@ -188,6 +188,23 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [ ] Deferred: ring-3 syscalls for IPC (mailboxes/mutex from M6b)
 - [ ] Deferred: a userspace `kush`-style shell split out of the kernel
 
+### M7 — Scheduler polish (done, v0.12.0)
+#### M7 C1 — Priority scheduling + idle boost
+- [x] Priority-based timeslicing: prio N -> 2^N ticks, capped at 16
+- [x] Idle task (prio 0) gets 32-tick slice when alone (avoids waste)
+- [x] `ttask_set_priority`/`ttask_get_priority` API
+- [x] `ttask_ready_count_ex` helper (pure, host-tested)
+- [x] `priority` shell command: view/set task priorities
+- [x] Enhanced `tasks` output: shows timeslice + blocked state
+- [x] ttask_smoke: 34 checks covering timeslice math, idle boost, ready count
+
+#### M7 C2 — Performance counters + scheduler stats
+- [x] Per-task perf counters: `switches`, `blocked_count`, `wake_count`
+- [x] Global scheduler stats: total switches, blocks, wakes
+- [x] `ttask_stats_t` struct and `ttask_get_stats()` API
+- [x] `perf` shell command: per-task counters + CPU util%
+- [x] `sched` shell command: global scheduler statistics
+
 ## Security model (honest scoping)
 
 TrigerOS defends against **software** tampering and data persistence:

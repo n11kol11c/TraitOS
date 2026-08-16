@@ -58,9 +58,8 @@ RAM filesystem — all surfaced through an interactive TUI shell.
 > **Status:** early but real. M0 (boot + console), M1 (interrupts + keyboard),
 > M2 (memory management), M3 (TUI shell), M4 (RAM filesystem), M5 (security
 > hardening), M6a (preemptive multitasking), M6b (IPC), M6c (user mode +
-> syscalls), and M7 C1 (priority scheduling + idle boost) are complete;
-> M7 C2 (scheduler tuning + perf counters) is next. See
-> [Roadmap](#roadmap).
+> syscalls), and M7 (priority scheduling + idle boost + perf counters) are
+> complete. See [Roadmap](#roadmap).
 
 ---
 
@@ -525,6 +524,8 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | `burst`    | spawn N demo tasks (default 4)                            |
 | `yield`    | yield the CPU to another task                             |
 | `priority` | get/set task priority (0=idle, 1=normal, 2=interactive, 3-7=urgent) |
+| `perf`     | show per-task performance counters (switches, blocked, wakes, util%) |
+| `sched`    | show global scheduler statistics (uptime, switches, CPU util) |
 | `ipc`      | mailbox demo: writer/reader block on a shared queue       |
 | `mutex`    | mutex demo: 3 tasks share a protected counter             |
 | `run`      | run a user-mode program (`hello`, `spinner`)               |
@@ -551,7 +552,7 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M6a** | Done | Preemptive multitasking: round-robin scheduler, context switch, `tasks`/`spawn`/`burst`/`yield` |
 | **M6b** | Done | IPC: blocking mailboxes (`send`/`recv`), recursive mutex, `ipc`/`mutex` demos |
 | **M6c** | Done | User mode: TSS, `int 0x80` syscalls, user ELF loader, `run` command |
-| **M7** | In progress | Multitasking polish: M7 C1 priority scheduling + idle boost (done), M7 C2 perf counters (next) |
+| **M7** | Done | Multitasking polish: M7 C1 priority scheduling + idle boost, M7 C2 perf counters + scheduler stats |
 
 Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 
