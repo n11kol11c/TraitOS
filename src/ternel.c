@@ -230,7 +230,7 @@ static void cmd_tasks(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    tprintf(" id  name      state    prio  ticks\n");
+    tprintf(" id  name      state    prio  slice  ticks\n");
     for (int i = 0; i < TTASK_MAX_TASKS; i++) {
         ttask_t *t = ttask_at(i);
         if (!t || t->state == TTASK_FREE)
@@ -238,12 +238,54 @@ static void cmd_tasks(int argc, char **argv)
         const char *st = t->state == TTASK_READY    ? "ready"
                          : t->state == TTASK_RUNNING ? "run"
                          : t->state == TTASK_EXITED  ? "done"
+                         : t->state == TTASK_BLOCKED ? "block"
                                                      : "?";
-        tprintf(" %-3d %-9s %-8s %-5u %-6u%s%s\n", i, t->name, st,
-                t->priority, t->ticks,
+        tprintf(" %-3d %-9s %-8s %-5u %-6u %-6u%s%s\n", i, t->name, st,
+                t->priority, t->slice, t->ticks,
                 t == current_task ? "  <=" : "",
                 t->user_mode ? "  user" : "");
     }
+}
+
+static void cmd_priority(int argc, char **argv)
+{
+    if (argc < 2) {
+        tprintf(" usage: priority <id> [0-7]\n");
+        tprintf(" priority levels: 0=idle, 1=normal, 2=interactive, 3-7=urgent\n");
+        tprintf(" current priorities:\n");
+        for (int i = 0; i < TTASK_MAX_TASKS; i++) {
+            ttask_t *t = ttask_at(i);
+            if (!t || t->state == TTASK_FREE || t->state == TTASK_EXITED)
+                continue;
+            tprintf("   %-3d %-9s prio=%u slice=%u\n",
+                    i, t->name, t->priority, t->slice);
+        }
+        return;
+    }
+    int id = 0;
+    for (char *p = argv[1]; *p >= '0' && *p <= '9'; p++)
+        id = id * 10 + (*p - '0');
+    if (id < 0 || id >= TTASK_MAX_TASKS || !ttask_at(id) ||
+        ttask_at(id)->state == TTASK_FREE || ttask_at(id)->state == TTASK_EXITED) {
+        tprintf(" invalid task id\n");
+        return;
+    }
+    if (argc < 3) {
+        tprintf(" task %d: prio=%u slice=%u ticks=%u\n",
+                id, ttask_get_priority((uint32_t)id),
+                ttask_at(id)->slice, ttask_at(id)->ticks);
+        return;
+    }
+    int prio = 0;
+    for (char *p = argv[2]; *p >= '0' && *p <= '9'; p++)
+        prio = prio * 10 + (*p - '0');
+    if (prio < 0 || prio > 7) {
+        tprintf(" priority must be 0-7\n");
+        return;
+    }
+    ttask_set_priority((uint32_t)id, (uint8_t)prio);
+    tprintf(" task %d priority set to %u (slice=%u)\n",
+            id, (unsigned)prio, ttask_at(id)->slice);
 }
 
 static void cmd_spawn(int argc, char **argv)
@@ -561,6 +603,7 @@ static void cmd_touch(int argc, char **argv);
 static void cmd_rm(int argc, char **argv);
 static void cmd_write(int argc, char **argv);
 static void cmd_mount(int argc, char **argv);
+static void cmd_priority(int argc, char **argv);
 
 static const struct {
     const char *name;
@@ -600,6 +643,7 @@ static const struct {
     { "rm",     cmd_rm,     "remove a file or directory" },
     { "write",  cmd_write,  "write text into a file" },
     { "mount",  cmd_mount,  "list mounted filesystems" },
+    { "priority", cmd_priority, "get/set task priority (priority <id> [0-7])" },
 };
 
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
@@ -646,7 +690,7 @@ static void cmd_ver(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    tprintf(" TrigerOS v0.11.0 (x86_64, Multiboot2)\n");
+    tprintf(" TrigerOS v0.12.0 (x86_64, Multiboot2)\n");
 }
 
 static void cmd_info(int argc, char **argv)
@@ -965,7 +1009,7 @@ void ternel_main(uintptr_t mbi)
     sec_harden();
     ttask_init();
 
-    tlog("TrigerOS v0.11.0 booted on x86_64\n");
+    tlog("TrigerOS v0.12.0 booted on x86_64\n");
     tlog("memory map: %u MiB available (%u frames)\n",
          (uint32_t)(tpmm_available_mem() >> 20), tpmm_free_frames());
     tlog("security: NX %s, W^X %s, SMEP+SMAP %s, KASLR %s, stack guard %s\n",
@@ -984,7 +1028,7 @@ void ternel_main(uintptr_t mbi)
          (uint32_t)USER_BLOB_COUNT);
 
     tprintf("===============================================\n");
-    tprintf(" TrigerOS v0.11.0 - RAM-resident, amnesic OS\n");
+    tprintf(" TrigerOS v0.12.0 - RAM-resident, amnesic OS\n");
     tprintf("===============================================\n\n");
 
     tprintf(" Type 'help' for a list of commands.\n");

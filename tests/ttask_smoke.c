@@ -1,6 +1,6 @@
-/* Host-side verification of the M6a scheduler pick (round-robin + priority)
- * in src/ttask_core.h. The kernel calls the exact same pure helper when it
- * selects the next task to run. */
+/* Host-side verification of the M7 scheduler pick (round-robin + priority
+ * + idle boost) in src/ttask_core.h. The kernel calls the exact same pure
+ * helper when it selects the next task to run. */
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -93,6 +93,47 @@ int main(void)
     printf("  -- context field layout (task_switch.asm dependency) --\n");
     check(offsetof(ttask_t, context) == 0, "context stays the first member");
     check(sizeof(((ttask_t *)0)->context) == 8, "context is 64-bit");
+
+    /* ---- M7: priority timeslice + idle boost ---- */
+
+    printf("  -- timeslice by priority --\n");
+    check(ttask_slice_ticks(0) == TTASK_SLICE_IDLE, "prio 0 gets idle slice");
+    check(ttask_slice_ticks(1) == 2,  "prio 1 -> 2 ticks");
+    check(ttask_slice_ticks(2) == 4,  "prio 2 -> 4 ticks");
+    check(ttask_slice_ticks(3) == 8,  "prio 3 -> 8 ticks");
+    check(ttask_slice_ticks(4) == TTASK_SLICE_MAX, "prio 4 -> capped at max");
+    check(ttask_slice_ticks(5) == TTASK_SLICE_MAX, "prio 5 -> capped at max");
+    check(ttask_slice_ticks(6) == TTASK_SLICE_MAX, "prio 6 -> capped at max");
+    check(ttask_slice_ticks(7) == TTASK_SLICE_MAX, "prio 7 -> capped at max");
+
+    printf("  -- idle boost: idle task gets long slice when alone --\n");
+    for (int i = 0; i < N; i++) {
+        st[i] = TTASK_FREE;
+        pr[i] = 0;
+    }
+    st[0] = TTASK_READY;   /* idle */
+    pr[0] = 0;
+    check(ttask_ready_count_ex(st, N) == 1, "only idle is ready");
+    check(ttask_slice_ticks(pr[0]) == TTASK_SLICE_IDLE,
+          "idle slice is long when alone");
+
+    printf("  -- ready count helper --\n");
+    for (int i = 0; i < N; i++) {
+        st[i] = TTASK_FREE;
+        pr[i] = 0;
+    }
+    check(ttask_ready_count_ex(st, N) == 0, "zero ready");
+    st[2] = TTASK_READY;
+    check(ttask_ready_count_ex(st, N) == 1, "one ready");
+    st[5] = TTASK_READY;
+    st[7] = TTASK_BLOCKED;
+    check(ttask_ready_count_ex(st, N) == 2, "two ready, one blocked");
+    st[5] = TTASK_EXITED;
+    check(ttask_ready_count_ex(st, N) == 1, "one ready, one exited");
+
+    printf("  -- high priority user tasks get longer slice --\n");
+    check(ttask_slice_ticks(2) > ttask_slice_ticks(1),
+          "interactive prio > normal prio");
 
     if (failures) {
         printf("TTASK SMOKE TEST FAILED (%d/%d failures)\n", failures, checks);

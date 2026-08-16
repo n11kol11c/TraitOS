@@ -38,12 +38,31 @@ static inline int ttask_pick_index(int current, const uint8_t *state,
  * priority gets a longer slice (fewer preemptions, so interactive and
  * high-priority work keeps the CPU); low-priority work yields often.
  * When a task's slice expires it is pushed to the back of the queue, so
- * every READY task of the same priority still gets its turn. */
-#define TTASK_SLICE_MAX 16u
+ * every READY task of the same priority still gets its turn.
+ *
+ * M7: the idle task (prio 0) gets a long slice (32 ticks) when it is the
+ * only READY task, avoiding pointless context-switch overhead. Normal
+ * priorities keep the exponential mapping: prio N -> 2^N ticks, capped
+ * at TTASK_SLICE_MAX. */
+#define TTASK_SLICE_MAX  16u
+#define TTASK_SLICE_IDLE 32u
 static inline uint32_t ttask_slice_ticks(uint8_t prio)
 {
+    if (prio == 0)
+        return TTASK_SLICE_IDLE;
     uint32_t s = 1u << ((unsigned)prio & 7u);
     return s > TTASK_SLICE_MAX ? TTASK_SLICE_MAX : s;
+}
+
+/* Determine whether a task is "alone" (no other READY tasks exist) by
+ * counting READY slots in the state array. Pure, host-testable. */
+static inline int ttask_ready_count_ex(const uint8_t *state, int count)
+{
+    int n = 0;
+    for (int i = 0; i < count; i++)
+        if (state[i] == TTASK_READY)
+            n++;
+    return n;
 }
 
 #endif

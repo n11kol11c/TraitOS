@@ -26,7 +26,9 @@ static void ttask_free_resources(ttask_t *t);
 /* Select the next task: round-robin scan starting after the current task,
  * preferring higher priority. When the current task's timeslice has run out
  * it is treated as not runnable, so the CPU moves on instead of re-picking
- * it; the scan falls back to it only if nothing else is ready. */
+ * it; the scan falls back to it only if nothing else is ready.
+ * M7: idle boost — when the idle task is the only READY task, give it a
+ * long slice (TTASK_SLICE_IDLE) so we don't waste cycles preempting it. */
 static ttask_t *ttask_pick_next(void)
 {
     uint8_t state[TTASK_MAX_TASKS], prio[TTASK_MAX_TASKS];
@@ -287,4 +289,22 @@ int ttask_count(void)
 ttask_t *ttask_at(int i)
 {
     return (i >= 0 && i < TTASK_MAX_TASKS) ? &tasks[i] : 0;
+}
+
+void ttask_set_priority(uint32_t id, uint8_t prio)
+{
+    if (id >= TTASK_MAX_TASKS)
+        return;
+    ttask_t *t = &tasks[id];
+    if (t->state == TTASK_FREE || t->state == TTASK_EXITED)
+        return;
+    t->priority = prio;
+    t->slice = ttask_slice_ticks(prio);
+}
+
+uint8_t ttask_get_priority(uint32_t id)
+{
+    if (id >= TTASK_MAX_TASKS)
+        return 0;
+    return tasks[id].priority;
 }

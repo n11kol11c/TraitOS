@@ -72,6 +72,12 @@ int ttask_ready(void);
 int ttask_count(void);
 ttask_t *ttask_at(int i);
 
+/* M7: priority API. Priority 0 = idle (gets a long slice when alone),
+ * 1 = normal kernel, 2 = interactive/user, 3-7 = increasingly urgent.
+ * The scheduler automatically maps priority to a timeslice length. */
+void ttask_set_priority(uint32_t id, uint8_t prio);
+uint8_t ttask_get_priority(uint32_t id);
+
 /* Scheduler internals shared with boot/task_switch.asm. */
 extern ttask_t *current_task;
 extern ttask_t *next_task;

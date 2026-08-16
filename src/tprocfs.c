@@ -17,7 +17,7 @@ static void gen_uptime(tfs_node_t *node, char *buf, size_t bufsz)
 static void gen_version(tfs_node_t *node, char *buf, size_t bufsz)
 {
     node->size = (size_t)tsprintf(buf, bufsz,
-        "TrigerOS v0.10.0 (x86_64, Multiboot2)\n");
+        "TrigerOS v0.12.0 (x86_64, Multiboot2)\n");
 }
 
 static void gen_meminfo(tfs_node_t *node, char *buf, size_t bufsz)
