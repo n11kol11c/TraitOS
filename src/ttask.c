@@ -2,6 +2,7 @@
 
 #include "ttask_core.h"
 #include "idt.h"
+#include "timer.h"
 #include "tss.h"
 #include "tstring.h"
 #include "tmalloc.h"
@@ -11,6 +12,11 @@
 /* Fixed task table: slot 0 is always the idle task (the boot context). */
 static ttask_t tasks[TTASK_MAX_TASKS];
 static int scheduler_ready = 0;
+
+/* M7 C2: global scheduler performance counters */
+static uint32_t total_switches = 0;
+static uint32_t total_blocks = 0;
+static uint32_t total_wakes = 0;
 
 ttask_t *current_task = 0;
 ttask_t *next_task = 0;
@@ -47,6 +53,8 @@ static void ttask_pick_switch(void)
     ttask_t *next = ttask_pick_next();
     if (next && next != current_task) {
         next->slice = ttask_slice_ticks(next->priority);
+        next->switches++;
+        total_switches++;
         /* ring-3 transitions land on this task's kernel stack (TSS rsp0) */
         tss_set_rsp0(next->stack ? (uint64_t)next->stack + next->stack_size
                                  : (uintptr_t)&stack_top);
@@ -229,6 +237,8 @@ void ttask_block(void)
     __asm__ volatile("pushfq\n\tpopq %0" : "=r"(flags));
     __asm__ volatile("cli");
     current_task->state = TTASK_BLOCKED;
+    current_task->blocked_count++;
+    total_blocks++;
     ttask_t *next = ttask_pick_next();
     if (!next || next == current_task) {
         current_task->state = TTASK_READY;   /* nobody else runnable */
@@ -248,8 +258,11 @@ void ttask_wake(uint32_t id)
 {
     if (id >= TTASK_MAX_TASKS)
         return;
-    if (tasks[id].state == TTASK_BLOCKED)
+    if (tasks[id].state == TTASK_BLOCKED) {
         tasks[id].state = TTASK_READY;
+        tasks[id].wake_count++;
+        total_wakes++;
+    }
 }
 
 void ttask_exit(void) __attribute__((noreturn));
@@ -307,4 +320,14 @@ uint8_t ttask_get_priority(uint32_t id)
     if (id >= TTASK_MAX_TASKS)
         return 0;
     return tasks[id].priority;
+}
+
+void ttask_get_stats(ttask_stats_t *out)
+{
+    if (!out)
+        return;
+    out->total_switches = total_switches;
+    out->total_ticks    = timer_ticks();
+    out->total_blocks   = total_blocks;
+    out->total_wakes    = total_wakes;
 }

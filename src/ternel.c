@@ -288,6 +288,54 @@ static void cmd_priority(int argc, char **argv)
             id, (unsigned)prio, ttask_at(id)->slice);
 }
 
+static void cmd_perf(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    ttask_stats_t st;
+    ttask_get_stats(&st);
+    tprintf(" id  name      prio  ticks  switches  blocked  wakes  util\n");
+    for (int i = 0; i < TTASK_MAX_TASKS; i++) {
+        ttask_t *t = ttask_at(i);
+        if (!t || t->state == TTASK_FREE || t->state == TTASK_EXITED)
+            continue;
+        uint32_t util = st.total_ticks > 0
+            ? (t->ticks * 100u) / st.total_ticks : 0;
+        tprintf(" %-3d %-9s %-5u %-6u %-9u %-8u %-6u %u%%\n",
+                i, t->name, t->priority, t->ticks,
+                t->switches, t->blocked_count, t->wake_count, util);
+    }
+}
+
+static void cmd_sched(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    ttask_stats_t st;
+    ttask_get_stats(&st);
+    int alive = ttask_count();
+    int ready = 0;
+    for (int i = 0; i < TTASK_MAX_TASKS; i++) {
+        ttask_t *t = ttask_at(i);
+        if (t && t->state == TTASK_READY)
+            ready++;
+    }
+    tprintf(" scheduler stats:\n");
+    tprintf("   uptime       : %us (%u ticks @ %u Hz)\n",
+            st.total_ticks / 100, st.total_ticks, timer_hz());
+    tprintf("   tasks        : %d alive, %d ready\n", alive, ready);
+    tprintf("   switches     : %u\n", st.total_switches);
+    tprintf("   blocks       : %u\n", st.total_blocks);
+    tprintf("   wakes        : %u\n", st.total_wakes);
+    tprintf("   idle util    : %u%%\n",
+            st.total_ticks > 0
+                ? (ttask_at(0)->ticks * 100u) / st.total_ticks : 0);
+    tprintf("   kernel util  : %u%%\n",
+            st.total_ticks > 0
+                ? ((st.total_ticks - ttask_at(0)->ticks) * 100u)
+                  / st.total_ticks : 0);
+}
+
 static void cmd_spawn(int argc, char **argv)
 {
     if (argc < 2) {
@@ -604,6 +652,8 @@ static void cmd_rm(int argc, char **argv);
 static void cmd_write(int argc, char **argv);
 static void cmd_mount(int argc, char **argv);
 static void cmd_priority(int argc, char **argv);
+static void cmd_perf(int argc, char **argv);
+static void cmd_sched(int argc, char **argv);
 
 static const struct {
     const char *name;
@@ -644,6 +694,8 @@ static const struct {
     { "write",  cmd_write,  "write text into a file" },
     { "mount",  cmd_mount,  "list mounted filesystems" },
     { "priority", cmd_priority, "get/set task priority (priority <id> [0-7])" },
+    { "perf",   cmd_perf,   "show per-task performance counters" },
+    { "sched",  cmd_sched,  "show global scheduler statistics" },
 };
 
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))

@@ -31,6 +31,10 @@ typedef struct ttask {
     uint8_t    priority;
     uint32_t   ticks;        /* CPU time consumed (PIT ticks) */
     uint32_t   slice;        /* ticks left in the current timeslice */
+    /* M7 C2: performance counters */
+    uint32_t   switches;     /* context switches INTO this task */
+    uint32_t   blocked_count;/* times this task was blocked */
+    uint32_t   wake_count;   /* times this task was woken */
     ttask_fn_t fn;           /* entry function (runs once) */
     void      *arg;
     void      *stack;        /* tmalloc'd kernel stack; TSS rsp0 target */
@@ -78,7 +82,15 @@ ttask_t *ttask_at(int i);
 void ttask_set_priority(uint32_t id, uint8_t prio);
 uint8_t ttask_get_priority(uint32_t id);
 
-/* Scheduler internals shared with boot/task_switch.asm. */
+/* M7 C2: performance counter API */
+typedef struct {
+    uint32_t total_switches;  /* total context switches since boot */
+    uint32_t total_ticks;     /* total PIT ticks since boot */
+    uint32_t total_blocks;    /* total block events */
+    uint32_t total_wakes;     /* total wake events */
+} ttask_stats_t;
+
+void ttask_get_stats(ttask_stats_t *out);
 extern ttask_t *current_task;
 extern ttask_t *next_task;
 void ttask_switch_ctx(void);
