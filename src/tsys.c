@@ -1,6 +1,7 @@
 #include "tsys.h"
 
 #include "idt.h"
+#include "keyboard.h"
 #include "serial.h"
 #include "timer.h"
 #include "ttask.h"
@@ -166,6 +167,28 @@ void syscall_handler(registers_t *r)
             break;
         }
         r->rax = (long)tipc_mutex_unlock(&tipc_table[id].u.mtx);
+        break;
+    }
+    case TSYS_READ: {
+        /* a1 = fd (must be 0=stdin), a2 = user buffer, a3 = max length */
+        if (a1 != 0 || a3 <= 0 ||
+            !vmm_range_user((uintptr_t)a2, (size_t)a3, 1)) {
+            r->rax = -1;
+            break;
+        }
+        /* Blocking read: yield until a key is available. */
+        int ch;
+        while ((ch = keyboard_getchar()) == KEY_NONE)
+            ttask_yield();
+        if (ch < 0) {
+            /* Special key — ignore for now, return 0 bytes. */
+            r->rax = 0;
+            break;
+        }
+        __asm__ volatile("stac" ::: "cc");
+        *(char *)a2 = (char)ch;
+        __asm__ volatile("clac" ::: "cc");
+        r->rax = 1;
         break;
     }
     default:

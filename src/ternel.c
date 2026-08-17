@@ -616,6 +616,69 @@ static void cmd_run(int argc, char **argv)
     tprintf(" '%s' running (pid %d)\n", argv[1], pid);
 }
 
+static void cmd_kush(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+
+    const struct user_blob *b = 0;
+    for (unsigned i = 0; i < USER_BLOB_COUNT; i++)
+        if (tstrcmp(user_blobs[i].name, "kush") == 0) {
+            b = &user_blobs[i];
+            break;
+        }
+    if (!b) {
+        tprintf(" kush not found in embedded programs\n");
+        return;
+    }
+
+    vmm_aspace_t *as = vmm_aspace_create();
+    if (!as) {
+        tprintf(" no address space available\n");
+        return;
+    }
+
+    telf_plan_t plan;
+    size_t bsz = (size_t)(b->end - b->start);
+    int rc = telf_load(as, (const uint8_t *)b->start, bsz, &plan);
+    if (rc != TELF_OK) {
+        vmm_aspace_destroy(as);
+        tprintf(" kush: load failed (%d)\n", rc);
+        return;
+    }
+
+    uintptr_t stack_phys = tpmm_alloc_low_contig(USER_STACK_SIZE / 4096);
+    if (!stack_phys) {
+        vmm_aspace_destroy(as);
+        tprintf(" kush: no stack frames\n");
+        return;
+    }
+    for (unsigned i = 0; i < USER_STACK_SIZE / 4096; i++)
+        if (vmm_aspace_map(as, USER_STACK_BASE + (uintptr_t)i * 4096,
+                           stack_phys + (uintptr_t)i * 4096,
+                           VMM_PAGE_USER | VMM_PAGE_WRITE | VMM_PAGE_NX)) {
+            vmm_aspace_destroy(as);
+            tprintf(" kush: stack map failed\n");
+            return;
+        }
+
+    ttask_t *t = ttask_create_user("kush", plan.entry, as,
+                                   USER_STACK_BASE + USER_STACK_SIZE);
+    if (!t) {
+        vmm_aspace_destroy(as);
+        tprintf(" kush: no task slot\n");
+        return;
+    }
+
+    int pid = -1;
+    for (int i = 0; i < TTASK_MAX_TASKS; i++)
+        if (ttask_at(i) == t) {
+            pid = i;
+            break;
+        }
+    tprintf(" kush running (pid %d)\n", pid);
+}
+
 /* ---- command interpreter --------------------------------------------- */
 
 static void cmd_help(int argc, char **argv);
@@ -654,6 +717,7 @@ static void cmd_mount(int argc, char **argv);
 static void cmd_priority(int argc, char **argv);
 static void cmd_perf(int argc, char **argv);
 static void cmd_sched(int argc, char **argv);
+static void cmd_kush(int argc, char **argv);
 
 static const struct {
     const char *name;
@@ -696,6 +760,7 @@ static const struct {
     { "priority", cmd_priority, "get/set task priority (priority <id> [0-7])" },
     { "perf",   cmd_perf,   "show per-task performance counters" },
     { "sched",  cmd_sched,  "show global scheduler statistics" },
+    { "kush",   cmd_kush,   "launch userspace shell (ring 3)" },
 };
 
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))

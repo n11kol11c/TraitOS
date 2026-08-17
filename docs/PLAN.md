@@ -205,6 +205,18 @@ build.sh                 deps/build/iso/run/usb/clean wrapper
 - [x] `perf` shell command: per-task counters + CPU util%
 - [x] `sched` shell command: global scheduler statistics
 
+### M8 — Userspace shell + IPC syscalls (in progress)
+#### M8 C1 — Ring-3 IPC syscalls
+- [x] IPC table: 32 kernel-owned objects (mailboxes/mutexes)
+- [x] Syscalls: MB_INIT(6), MB_SEND(7), MB_RECV(8), MUTEX_INIT(9), MUTEX_LOCK(10), MUTEX_UNLOCK(11)
+- [x] GETTICKS(12) and READ(13) syscalls
+- [x] User-side syscall stubs (user/syscall.h)
+
+#### M8 C2 — Userspace shell (kush)
+- [x] kush: ring-3 interactive shell with readline, prompt, builtins
+- [x] Builtins: help, exit, clear, echo, pid, ticks, uptime
+- [x] `kush` command in kernel shell to launch
+
 ## Security model (honest scoping)
 
 TrigerOS defends against **software** tampering and data persistence:

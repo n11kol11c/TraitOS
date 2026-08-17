@@ -553,6 +553,7 @@ the RAM filesystem is verified — no emulator anywhere in the pipeline.
 | **M6b** | Done | IPC: blocking mailboxes (`send`/`recv`), recursive mutex, `ipc`/`mutex` demos |
 | **M6c** | Done | User mode: TSS, `int 0x80` syscalls, user ELF loader, `run` command |
 | **M7** | Done | Multitasking polish: M7 C1 priority scheduling + idle boost, M7 C2 perf counters + scheduler stats |
+| **M8** | In progress | Ring-3 IPC syscalls + userspace shell (kush) |
 
 Full per-item checklist: [`docs/PLAN.md`](docs/PLAN.md).
 

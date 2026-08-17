@@ -42,18 +42,32 @@ KERN_OBJS = \
 # User-mode programs: assembled, linked at VMM_USER_BASE, then embedded into
 # the kernel image as raw blobs (ld -r -b binary) so `run <program>` can load
 # them into a ring-3 address space at boot.
-USER_PROGS = user/hello.elf user/spinner.elf
+USER_PROGS = user/hello.elf user/spinner.elf user/kush.elf
 USER_TEXT  = 0x8000000000
 
 build/user_blobs.o: $(USER_PROGS)
 	@mkdir -p build
 	$(LD) -m elf_x86_64 -r -b binary $(USER_PROGS) -o $@
 
+USER_CFLAGS = --target=$(TARGET) -std=gnu11 -ffreestanding -O2 -Wall \
+              -fno-stack-protector -fno-builtin -fpie -mcmodel=large \
+              -fno-asynchronous-unwind-tables -fcf-protection=none \
+              -mno-red-zone -mgeneral-regs-only \
+              -mno-sse -mno-sse2 -mno-mmx -mno-80387 \
+              -nostdlib -Isrc -Iuser
+
+user/%.o: user/%.c
+	@$(CC) $(USER_CFLAGS) -c $< -o $@
+
 user/%.o: user/%.S
 	@$(ASM) $(ASMFLAGS) $< -o $@
 
 user/%.elf: user/%.o user/user.ld
 	@$(LD) -m elf_x86_64 -z noexecstack -T user/user.ld -o $@ $<
+
+# C user programs: link startup stub + C object
+user/kush.elf: user/kush_start.o user/kush.o user/user.ld
+	@$(LD) -m elf_x86_64 -pie -z noexecstack -T user/user.ld -o $@ user/kush_start.o user/kush.o
 
 KERN_OBJS += build/user_blobs.o
 
@@ -113,7 +127,7 @@ smoke: $(RAMFS_IMG)
 clean:
 	@rm -rf build
 	@rm -f $(KERN_OBJS) trigeros.bin trigeros.iso $(RAMFS_IMG)
-	@rm -f user/hello.o user/hello.elf user/spinner.o user/spinner.elf
+	@rm -f user/hello.o user/hello.elf user/spinner.o user/spinner.elf user/kush.o user/kush.elf user/kush_start.o
 
 .PHONY: all iso run smoke clean user-programs
 

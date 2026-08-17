@@ -17,6 +17,8 @@ enum {
     TSYS_MUTEX_LOCK = 10,
     TSYS_MUTEX_UNLOCK = 11,
     TSYS_GETTICKS   = 12,
+    /* M8 C2: keyboard input */
+    TSYS_READ       = 13,
 };
 
 #endif
