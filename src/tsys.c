@@ -4,8 +4,23 @@
 #include "serial.h"
 #include "timer.h"
 #include "ttask.h"
+#include "tipc.h"
 #include "tvmm.h"
 #include "vga.h"
+
+/* M8 C1: IPC table — maps integer IDs to kernel mailboxes/mutexes.
+ * User programs receive IDs (0..TIPC_MAX_OBJ-1) and pass them back
+ * through syscalls. The kernel owns the actual objects. */
+#define TIPC_MAX_OBJ 32
+enum tipc_obj_type { TIPC_OBJ_FREE = 0, TIPC_OBJ_MB, TIPC_OBJ_MUTEX };
+
+static struct {
+    enum tipc_obj_type type;
+    union {
+        tipc_mailbox_t mb;
+        tipc_mutex_t   mtx;
+    } u;
+} tipc_table[TIPC_MAX_OBJ];
 
 /* Dispatch entry for the `int 0x80` gate (vector 128, DPL 3). Called from
  * boot/isr_stubs.asm with the full saved context; the return value goes
@@ -59,6 +74,98 @@ void syscall_handler(registers_t *r)
         while ((int64_t)((uint64_t)timer_ticks() - until) < 0)
             ttask_yield();
         r->rax = 0;
+        break;
+    }
+    case TSYS_GETTICKS:
+        r->rax = (long)timer_ticks();
+        break;
+    /* --- M8 C1: IPC syscalls --- */
+    case TSYS_MB_INIT: {
+        /* Find a free slot and init a mailbox there. */
+        int id = -1;
+        for (int i = 0; i < TIPC_MAX_OBJ; i++) {
+            if (tipc_table[i].type == TIPC_OBJ_FREE) {
+                tipc_table[i].type = TIPC_OBJ_MB;
+                if (tipc_mailbox_init(&tipc_table[i].u.mb) != 0) {
+                    tipc_table[i].type = TIPC_OBJ_FREE;
+                    break;
+                }
+                id = i;
+                break;
+            }
+        }
+        r->rax = (long)id;
+        break;
+    }
+    case TSYS_MB_SEND: {
+        /* a1 = mailbox id, a2 = user pointer to tipc_msg_t (64 bytes) */
+        long id = a1;
+        if (id < 0 || id >= TIPC_MAX_OBJ ||
+            tipc_table[id].type != TIPC_OBJ_MB ||
+            !vmm_range_user((uintptr_t)a2, sizeof(tipc_msg_t), 0)) {
+            r->rax = -1;
+            break;
+        }
+        tipc_msg_t msg;
+        __asm__ volatile("stac" ::: "cc");
+        __builtin_memcpy(&msg, (void *)a2, sizeof(tipc_msg_t));
+        __asm__ volatile("clac" ::: "cc");
+        msg.sender = ttask_self();       /* stamp sender, ignore user value */
+        r->rax = (long)tipc_send(&tipc_table[id].u.mb, &msg);
+        break;
+    }
+    case TSYS_MB_RECV: {
+        /* a1 = mailbox id, a2 = user pointer to tipc_msg_t (output) */
+        long id = a1;
+        if (id < 0 || id >= TIPC_MAX_OBJ ||
+            tipc_table[id].type != TIPC_OBJ_MB ||
+            !vmm_range_user((uintptr_t)a2, sizeof(tipc_msg_t), 0)) {
+            r->rax = -1;
+            break;
+        }
+        tipc_msg_t out;
+        r->rax = (long)tipc_recv(&tipc_table[id].u.mb, &out);
+        if (r->rax == 0) {
+            __asm__ volatile("stac" ::: "cc");
+            __builtin_memcpy((void *)a2, &out, sizeof(tipc_msg_t));
+            __asm__ volatile("clac" ::: "cc");
+        }
+        break;
+    }
+    case TSYS_MUTEX_INIT: {
+        int id = -1;
+        for (int i = 0; i < TIPC_MAX_OBJ; i++) {
+            if (tipc_table[i].type == TIPC_OBJ_FREE) {
+                tipc_table[i].type = TIPC_OBJ_MUTEX;
+                if (tipc_mutex_init(&tipc_table[i].u.mtx) != 0) {
+                    tipc_table[i].type = TIPC_OBJ_FREE;
+                    break;
+                }
+                id = i;
+                break;
+            }
+        }
+        r->rax = (long)id;
+        break;
+    }
+    case TSYS_MUTEX_LOCK: {
+        long id = a1;
+        if (id < 0 || id >= TIPC_MAX_OBJ ||
+            tipc_table[id].type != TIPC_OBJ_MUTEX) {
+            r->rax = -1;
+            break;
+        }
+        r->rax = (long)tipc_mutex_lock(&tipc_table[id].u.mtx);
+        break;
+    }
+    case TSYS_MUTEX_UNLOCK: {
+        long id = a1;
+        if (id < 0 || id >= TIPC_MAX_OBJ ||
+            tipc_table[id].type != TIPC_OBJ_MUTEX) {
+            r->rax = -1;
+            break;
+        }
+        r->rax = (long)tipc_mutex_unlock(&tipc_table[id].u.mtx);
         break;
     }
     default:
